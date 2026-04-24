@@ -1,4 +1,5 @@
-use crate::types::{XYZ, XyY, Lab, WhitePoint};
+use crate::types::{XYZ, XyY, Lab, RGB, WhitePoint};
+use crate::gamma::{srgb_gamma_encode, srgb_gamma_decode};
 
 impl XYZ {
     /// Convert XYZ to xyY chromaticity coordinates
@@ -82,6 +83,61 @@ impl Lab {
             x: xyz_n.x * lab_f_inv(fx),
             y: xyz_n.y * lab_f_inv(fy),
             z: xyz_n.z * lab_f_inv(fz),
+        }
+    }
+}
+
+/// sRGB D65 primaries to XYZ conversion matrix (scaled by 100 so white Y=100)
+const SRGB_TO_XYZ: [[f64; 3]; 3] = [
+    [41.24564, 35.75761, 18.04375],
+    [21.26729, 71.51522, 7.21750],
+    [1.93339, 11.91920, 95.03041],
+];
+
+const XYZ_TO_SRGB: [[f64; 3]; 3] = [
+    [0.032404542, -0.015371385, -0.004985314],
+    [-0.009692660, 0.018760108, 0.000415560],
+    [0.000556434, -0.002040259, 0.010572252],
+];
+
+impl RGB {
+    /// Convert linear RGB to XYZ (D65, sRGB primaries)
+    pub fn to_xyz_srgb(&self) -> XYZ {
+        XYZ {
+            x: SRGB_TO_XYZ[0][0] * self.r + SRGB_TO_XYZ[0][1] * self.g + SRGB_TO_XYZ[0][2] * self.b,
+            y: SRGB_TO_XYZ[1][0] * self.r + SRGB_TO_XYZ[1][1] * self.g + SRGB_TO_XYZ[1][2] * self.b,
+            z: SRGB_TO_XYZ[2][0] * self.r + SRGB_TO_XYZ[2][1] * self.g + SRGB_TO_XYZ[2][2] * self.b,
+        }
+    }
+
+    /// Convert gamma-encoded sRGB to XYZ (applies inverse gamma first)
+    pub fn to_xyz_from_encoded_srgb(&self) -> XYZ {
+        let linear = RGB {
+            r: srgb_gamma_decode(self.r),
+            g: srgb_gamma_decode(self.g),
+            b: srgb_gamma_decode(self.b),
+        };
+        linear.to_xyz_srgb()
+    }
+}
+
+impl XYZ {
+    /// Convert XYZ to linear sRGB RGB
+    pub fn to_rgb_srgb(&self) -> RGB {
+        RGB {
+            r: XYZ_TO_SRGB[0][0] * self.x + XYZ_TO_SRGB[0][1] * self.y + XYZ_TO_SRGB[0][2] * self.z,
+            g: XYZ_TO_SRGB[1][0] * self.x + XYZ_TO_SRGB[1][1] * self.y + XYZ_TO_SRGB[1][2] * self.z,
+            b: XYZ_TO_SRGB[2][0] * self.x + XYZ_TO_SRGB[2][1] * self.y + XYZ_TO_SRGB[2][2] * self.z,
+        }
+    }
+
+    /// Convert XYZ to gamma-encoded sRGB (applies gamma encoding)
+    pub fn to_encoded_rgb_srgb(&self) -> RGB {
+        let linear = self.to_rgb_srgb();
+        RGB {
+            r: srgb_gamma_encode(linear.r),
+            g: srgb_gamma_encode(linear.g),
+            b: srgb_gamma_encode(linear.b),
         }
     }
 }

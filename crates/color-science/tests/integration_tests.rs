@@ -176,3 +176,84 @@ fn test_bradford_same_whitepoint_no_change() {
     assert!((xyz.y - adapted.y).abs() < 0.0001);
     assert!((xyz.z - adapted.z).abs() < 0.0001);
 }
+
+use color_science::gamma::*;
+
+#[test]
+fn test_srgb_gamma_encode_zero() {
+    assert!((srgb_gamma_encode(0.0) - 0.0).abs() < 0.0001);
+}
+
+#[test]
+fn test_srgb_gamma_encode_one() {
+    assert!((srgb_gamma_encode(1.0) - 1.0).abs() < 0.0001);
+}
+
+#[test]
+fn test_srgb_gamma_roundtrip() {
+    let linear = 0.5;
+    let encoded = srgb_gamma_encode(linear);
+    let decoded = srgb_gamma_decode(encoded);
+    assert!((linear - decoded).abs() < 0.00001);
+}
+
+#[test]
+fn test_gamma_22() {
+    let linear = 0.5;
+    let encoded = gamma_encode(linear, 2.2);
+    let expected = linear.powf(1.0 / 2.2);
+    assert!((encoded - expected).abs() < 0.0001);
+}
+
+#[test]
+fn test_pq_encode_decode() {
+    let linear = 0.1;
+    let encoded = pq_encode(linear);
+    let decoded = pq_decode(encoded);
+    assert!((linear - decoded).abs() < 0.00001);
+}
+
+#[test]
+fn test_hlg_encode_decode() {
+    let linear = 0.5;
+    let encoded = hlg_encode(linear);
+    let decoded = hlg_decode(encoded);
+    assert!((linear - decoded).abs() < 0.00001);
+}
+
+#[test]
+fn test_srgb_to_xyz_red() {
+    let rgb = RGB { r: 1.0, g: 0.0, b: 0.0 };
+    let xyz = rgb.to_xyz_srgb();
+    assert!((xyz.x - 41.2456).abs() < 0.01);
+    assert!((xyz.y - 21.2673).abs() < 0.01);
+    assert!((xyz.z - 1.9334).abs() < 0.01);
+}
+
+#[test]
+fn test_srgb_to_xyz_white() {
+    let rgb = RGB { r: 1.0, g: 1.0, b: 1.0 };
+    let xyz = rgb.to_xyz_srgb();
+    assert!((xyz.x - 95.047).abs() < 0.1);
+    assert!((xyz.y - 100.0).abs() < 0.1);
+    assert!((xyz.z - 108.883).abs() < 0.1);
+}
+
+#[test]
+fn test_xyz_to_srgb_red() {
+    let xyz = XYZ { x: 41.2456, y: 21.2673, z: 1.9334 };
+    let rgb = xyz.to_rgb_srgb();
+    assert!((rgb.r - 1.0).abs() < 0.001);
+    assert!(rgb.g.abs() < 0.001);
+    assert!(rgb.b.abs() < 0.001);
+}
+
+#[test]
+fn test_srgb_roundtrip() {
+    let original = RGB { r: 0.5, g: 0.3, b: 0.8 };
+    let xyz = original.to_xyz_srgb();
+    let back = xyz.to_rgb_srgb();
+    assert!((original.r - back.r).abs() < 0.0001);
+    assert!((original.g - back.g).abs() < 0.0001);
+    assert!((original.b - back.b).abs() < 0.0001);
+}
