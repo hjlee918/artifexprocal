@@ -78,3 +78,40 @@ fn test_xyz_xyy_roundtrip() {
     assert!((original.y - back.y).abs() < 0.0001);
     assert!((original.z - back.z).abs() < 0.0001);
 }
+
+#[test]
+fn test_xyz_to_lab_srgb_red() {
+    let xyz = XYZ { x: 41.2456, y: 21.2673, z: 1.9334 };
+    let lab = xyz.to_lab(WhitePoint::D65);
+    assert!((lab.L - 53.2329).abs() < 0.03);
+    assert!((lab.a - 80.1093).abs() < 0.03);
+    assert!((lab.b - 67.2201).abs() < 0.03);
+}
+
+#[test]
+fn test_xyz_to_lab_d65_white() {
+    let xyz = XYZ { x: 95.047, y: 100.0, z: 108.883 };
+    let lab = xyz.to_lab(WhitePoint::D65);
+    assert!((lab.L - 100.0).abs() < 0.01);
+    assert!(lab.a.abs() < 0.01);
+    assert!(lab.b.abs() < 0.01);
+}
+
+#[test]
+fn test_lab_to_xyz_srgb_red() {
+    let lab = Lab { L: 53.2329, a: 80.1093, b: 67.2201 };
+    let xyz = lab.to_xyz(WhitePoint::D65);
+    assert!((xyz.x - 41.2456).abs() < 0.03);
+    assert!((xyz.y - 21.2673).abs() < 0.03);
+    assert!((xyz.z - 1.9334).abs() < 0.03);
+}
+
+#[test]
+fn test_xyz_lab_roundtrip() {
+    let original = XYZ { x: 50.0, y: 75.0, z: 25.0 };
+    let lab = original.to_lab(WhitePoint::D65);
+    let back = lab.to_xyz(WhitePoint::D65);
+    assert!((original.x - back.x).abs() < 0.001);
+    assert!((original.y - back.y).abs() < 0.001);
+    assert!((original.z - back.z).abs() < 0.001);
+}
