@@ -115,3 +115,44 @@ fn test_xyz_lab_roundtrip() {
     assert!((original.y - back.y).abs() < 0.001);
     assert!((original.z - back.z).abs() < 0.001);
 }
+
+use color_science::delta_e::*;
+
+#[test]
+fn test_delta_e_2000_sharma_pair1() {
+    let lab1 = Lab { L: 50.0000, a: 2.6772, b: -79.7751 };
+    let lab2 = Lab { L: 50.0000, a: 0.0000, b: -82.7485 };
+    let de = delta_e_2000(&lab1, &lab2);
+    assert!((de - 2.0425).abs() < 0.0001);
+}
+
+#[test]
+fn test_delta_e_2000_sharma_pair2() {
+    let lab1 = Lab { L: 50.0000, a: -1.1848, b: -84.8006 };
+    let lab2 = Lab { L: 50.0000, a: 0.0000, b: -82.7485 };
+    let de = delta_e_2000(&lab1, &lab2);
+    assert!((de - 1.0000).abs() < 0.0001);
+}
+
+#[test]
+fn test_delta_e_2000_sharma_pair24() {
+    let lab1 = Lab { L: 60.2574, a: -34.0099, b: 36.2677 };
+    let lab2 = Lab { L: 60.4626, a: -34.1751, b: 39.4387 };
+    let de = delta_e_2000(&lab1, &lab2);
+    assert!((de - 1.2644).abs() < 0.0001);
+}
+
+#[test]
+fn test_delta_e_2000_identical_colors() {
+    let lab = Lab { L: 50.0, a: 10.0, b: -20.0 };
+    let de = delta_e_2000(&lab, &lab);
+    assert!(de.abs() < 0.0001);
+}
+
+#[test]
+fn test_delta_e_2000_large_difference() {
+    let lab1 = Lab { L: 50.0, a: 2.5, b: 0.0 };
+    let lab2 = Lab { L: 73.0, a: 25.0, b: -18.0 };
+    let de = delta_e_2000(&lab1, &lab2);
+    assert!((de - 27.1492).abs() < 0.0001);
+}
