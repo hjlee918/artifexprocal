@@ -1,4 +1,5 @@
 use color_science::types::*;
+use color_science::conversion::*;
 
 #[test]
 fn test_xyz_creation() {
@@ -39,4 +40,41 @@ fn test_white_point_d65() {
     assert!((xyz.x - 95.047).abs() < 0.001);
     assert!((xyz.y - 100.0).abs() < 0.001);
     assert!((xyz.z - 108.883).abs() < 0.001);
+}
+
+#[test]
+fn test_xyz_to_xyy_srgb_red() {
+    let xyz = XYZ { x: 41.2456, y: 21.2673, z: 1.9334 };
+    let xyy = xyz.to_xyy();
+    assert!((xyy.x - 0.6399).abs() < 0.0001);
+    assert!((xyy.y - 0.3300).abs() < 0.0001);
+    assert!((xyy.Y - 21.2673).abs() < 0.0001);
+}
+
+#[test]
+fn test_xyy_to_xyz_srgb_red() {
+    let xyy = XyY { x: 0.6399, y: 0.3300, Y: 21.2673 };
+    let xyz = xyy.to_xyz();
+    assert!((xyz.x - 41.2456).abs() < 0.01);
+    assert!((xyz.y - 21.2673).abs() < 0.01);
+    assert!((xyz.z - 1.9334).abs() < 0.01);
+}
+
+#[test]
+fn test_xyz_to_xyy_zero_returns_zero() {
+    let xyz = XYZ { x: 0.0, y: 0.0, z: 0.0 };
+    let xyy = xyz.to_xyy();
+    assert_eq!(xyy.x, 0.0);
+    assert_eq!(xyy.y, 0.0);
+    assert_eq!(xyy.Y, 0.0);
+}
+
+#[test]
+fn test_xyz_xyy_roundtrip() {
+    let original = XYZ { x: 50.0, y: 75.0, z: 25.0 };
+    let xyy = original.to_xyy();
+    let back = xyy.to_xyz();
+    assert!((original.x - back.x).abs() < 0.0001);
+    assert!((original.y - back.y).abs() < 0.0001);
+    assert!((original.z - back.z).abs() < 0.0001);
 }
