@@ -156,3 +156,23 @@ fn test_delta_e_2000_large_difference() {
     let de = delta_e_2000(&lab1, &lab2);
     assert!((de - 27.1492).abs() < 0.0001);
 }
+
+use color_science::adaptation::*;
+
+#[test]
+fn test_bradford_d65_to_d50() {
+    let xyz_d65 = XYZ { x: 95.047, y: 100.0, z: 108.883 };
+    let xyz_d50 = bradford_adapt(&xyz_d65, WhitePoint::D65, WhitePoint::D50);
+    assert!((xyz_d50.x - 96.421).abs() < 0.1);
+    assert!((xyz_d50.y - 100.0).abs() < 0.1);
+    assert!((xyz_d50.z - 82.519).abs() < 0.1);
+}
+
+#[test]
+fn test_bradford_same_whitepoint_no_change() {
+    let xyz = XYZ { x: 50.0, y: 75.0, z: 25.0 };
+    let adapted = bradford_adapt(&xyz, WhitePoint::D65, WhitePoint::D65);
+    assert!((xyz.x - adapted.x).abs() < 0.0001);
+    assert!((xyz.y - adapted.y).abs() < 0.0001);
+    assert!((xyz.z - adapted.z).abs() < 0.0001);
+}
