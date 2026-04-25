@@ -1,0 +1,11 @@
+[package]
+name = "hal"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Hardware Abstraction Layer for display calibration"
+
+[dependencies]
+color-science = { path = "../color-science" }
+thiserror = "1"
