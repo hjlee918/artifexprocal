@@ -23,3 +23,8 @@ pub trait PatternGenerator: Send + Sync {
     fn disconnect(&mut self);
     fn display_patch(&mut self, color: &RGB) -> Result<(), PatternGenError>;
 }
+
+pub trait PatternGeneratorExt: PatternGenerator {
+    fn display_pattern(&mut self, pattern_name: &str) -> Result<(), PatternGenError>;
+    fn list_patterns(&self) -> Vec<String>;
+}

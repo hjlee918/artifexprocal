@@ -1,4 +1,4 @@
-use color_science::types::RGB;
+pub use color_science::types::RGB;
 
 pub struct Lut1D {
     pub channels: [Vec<f64>; 3],
