@@ -1,0 +1,20 @@
+[package]
+name = "hal-patterns"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Pattern generator drivers (PGenerator 1.6, DeviceControl)"
+
+[dependencies]
+hal = { path = "../hal" }
+calibration-core = { path = "../calibration-core" }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+quick-xml = { version = "0.37", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+urlencoding = "1"
+
+[dev-dependencies]
+mockall = "0.13"
+tiny_http = "0.12"

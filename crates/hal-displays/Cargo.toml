@@ -1,0 +1,22 @@
+[package]
+name = "hal-displays"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Display controller drivers (LG OLED, DeviceControl)"
+
+[dependencies]
+hal = { path = "../hal" }
+calibration-core = { path = "../calibration-core" }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+tungstenite = { version = "0.24", features = ["native-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+url = "2"
+base64 = "0.22"
+
+[dev-dependencies]
+mockall = "0.13"
+tiny_http = "0.12"
