@@ -1,3 +1,4 @@
+pub mod lg_internal;
 pub mod lg_oled;
 pub mod pgenerator;
 pub mod sony_projector;

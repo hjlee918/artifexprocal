@@ -111,3 +111,19 @@ fn test_i1_pro_2_connect() {
     assert!(meter.connect().is_ok());
     assert_eq!(meter.model(), "i1 Pro 2");
 }
+
+use hal::devices::lg_internal::LgInternalPatternGenerator;
+
+#[test]
+fn test_lg_internal_connect_valid_ip() {
+    let mut gen = LgInternalPatternGenerator::new("192.168.1.100");
+    assert!(gen.connect().is_ok());
+}
+
+#[test]
+fn test_lg_internal_display_patch_stub() {
+    let mut gen = LgInternalPatternGenerator::new("192.168.1.100");
+    gen.connect().unwrap();
+    let color = color_science::types::RGB { r: 0.0, g: 0.0, b: 0.0 };
+    assert!(gen.display_patch(&color).is_ok());
+}
