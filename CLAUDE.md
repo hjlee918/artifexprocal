@@ -95,6 +95,114 @@ These are essential references for understanding the LG webOS internals, network
 
 These are the primary references for implementing the `hal_displays` LG OLED module.
 
+## Calibration Procedures and Protocols
+
+### LG OLED Calibration Protocol (SSAP over WebSocket)
+
+**Transport:** WebSocket connection on port 3000 (plain) or 3001 (secure/wss). Commands sent as cleartext JSON payloads.
+
+**Discovery:** SSDP M-SEARCH to `udp://239.255.255.250:1900` with service type `urn:lge-com:service:webos-second-screen:1`. TV responds with its IP and WebSocket endpoint.
+
+**Pairing:** PIN-based. TV displays a passcode on screen; client sends it via WebSocket to authenticate. Client key is stored for subsequent connections.
+
+**Calibration Mode:** Must be entered before any calibration commands. Uses `start_calibration(picMode="expert1")` and `end_calibration()`. During calibration mode, HDR10 tone mapping is bypassed, ASBL is disabled, and the TV accepts LUT uploads.
+
+**Key Calibration Commands:**
+- `start_calibration(picMode)` — Enter calibration mode for a specific picture profile
+- `end_calibration()` — Exit calibration mode and lock state
+- `upload_1d_lut(data)` / `upload_1d_lut_from_file(path)` — Upload 1D LUT (1024 entries for SDR)
+- `upload_3d_lut_bt709_from_file(path)` — Upload 3D LUT for BT.709 (33x33x33 on Alpha 9 Gen 4+)
+- `upload_3d_lut_bt2020_from_file(path)` — Upload 3D LUT for BT.2020
+- `set_dolby_vision_config_data(data)` — Upload Dolby Vision configuration
+- `set_3by3_gamut_data(matrix)` — Upload 3x3 gamut correction matrix
+- `set_tonemap_params(params)` — Set HDR10 tone mapping parameters
+- `ddc_reset` — Reset DDC controls to factory defaults
+
+**Picture Mode Independence:** SDR, HDR10, and Dolby Vision are completely independent. To upload a LUT for a specific mode, the TV must be receiving that signal type (e.g., HDR10 content playing for HDR10 LUT upload, DV blank video for DV config upload).
+
+**Chip Differences:** Alpha 9 Gen 4 (C1) uses 33-point 3D LUTs; Alpha 7 uses 17-point. Model string available from `get_software_info` SSAP response.
+
+### iTPG (Internal Test Pattern Generator)
+
+Available on 2019+ LG OLED models. Accessible via SSAP/WebSocket during calibration mode.
+
+**Functions:**
+- `start_itpg()` — Enable internal pattern generator
+- `stop_itpg()` — Disable internal pattern generator
+- `set_itpg_patch_window(win_h, win_v, patch_h, patch_v)` — Set window and patch size
+- `set_itpg_patch_color(r, g, b, ...)` — Set current patch color (10-bit values, 0-1023)
+
+**Note:** iTPG operates at the TV's native bit depth. RGB values are 10-bit (0-1023). The iTPG cannot generate Dolby Vision metadata, so DV calibration cannot be verified using iTPG alone.
+
+### PGenerator 1.6 HTTP API (External Pattern Generator)
+
+PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to display test patches on its HDMI output.
+
+**Base URL:** `http://<pi-ip>:8080`
+
+**Endpoints:**
+- `GET /patch?r=<R>&g=<G>&b=<B>` — Display patch with 8-bit RGB values (0-255)
+- `GET /patch?r=0&g=0&b=0` — Display black patch
+
+**Implementation Notes:**
+- PGenerator is always running; no explicit start/stop needed
+- On stop, send black patch to clear the display
+- Include a `probe()` method that calls the black endpoint to verify connectivity before measurement sessions
+- If the actual API differs (e.g., `/measure` or `/setPatch`), only the PGenerator client implementation needs updating
+
+### Pre-Calibration Procedures
+
+**Equipment Warm-up:**
+- TV: Powered on with standard content for minimum 45 minutes (preferably 1 hour)
+- Probes: Connected to USB port of calibration computer for 20-30 minutes minimum
+
+**TV Settings Preparation:**
+- Disable processing (2021+ LG OLED models have specific processing disable steps)
+- Disable ASBL (Auto Static Brightness Limiter) and GSR
+- Set Brightness and Contrast to appropriate reference values
+- Pre-calibrate white balance in Service Menu if desired
+- For HDR: Play HDR blank video file via internal media player to maintain HDR mode
+- For Dolby Vision: Play DV blank video file to maintain DV mode
+
+**Measurement Setup:**
+- Set stabilization delay to 5 seconds
+- Set patch size to L32 (32% of screen)
+- Enable Profile Luma (Nits) Auto
+- Set patch scale to Legal for SDR, Full for HDR/DV
+- Minimum extra delay time: 0.50 seconds to minimize sync read issues with iTPG
+
+**Target Values (SDR Reference):**
+- Color space: Rec.709
+- Gamma: Power Law 2.4
+- Peak luminance: 100 nits (@ 100% White)
+- 109% white: ~124 nits (for Video Extended range with Contrast at default 85)
+
+### Calibration Workflow
+
+1. **Connect TV** — SSAP WebSocket connection with PIN pairing
+2. **Select picture mode + color space + HDR format**
+3. **Select pattern generator** — iTPG (internal) or PGenerator (external Pi)
+4. **Select meter** — i1 Display Pro or i1 Pro 2
+5. **Run pre-calibration measurement** — Display grayscale + primaries + secondaries, record XYZ readings
+6. **Generate correction LUTs** — 1D tone curve from grayscale, 3D LUT from full patch set
+7. **Upload LUTs** — Upload to TV via calibration API
+8. **Verify** — Measure again to confirm calibration accuracy
+
+### Key Open-Source Libraries for Reference
+
+| Language | Library | URL |
+|----------|---------|-----|
+| Python (async) | bscpylgtv | https://github.com/chros73/bscpylgtv |
+| Python (async) | aiopylgtv | https://github.com/bendavid/aiopylgtv |
+| Python | PyWebOSTV | https://github.com/supersaiyanmode/PyWebOSTV |
+| Node.js | lgtv2 | https://github.com/hobbyquaker/lgtv2 |
+| Go | go-webos | https://pkg.go.dev/github.com/kaperys/go-webos |
+
+### Firmware Warnings
+
+- **webOS 7.3+:** Communication protocol changed and broke existing calibration tools. Do not update to webOS 7.3 if calibration compatibility is required.
+- **Model/Year Differences:** The LG command protocol is inconsistent between models and firmware versions. Commands must be validated per model/year combination.
+
 ## Competitors for Reference
 
 - [CalMAN Ultimate](https://store.portrait.com/calman-ultimate/) — $2,995, Windows-only, subscription updates
