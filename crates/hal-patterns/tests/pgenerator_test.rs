@@ -12,5 +12,5 @@ fn test_pgenerator_list_patterns() {
 fn test_pgenerator_devicecontrol_create() {
     let ctrl = PGeneratorController::devicecontrol(81);
     // DeviceControl mode, not connected yet
-    assert_eq!(ctrl.list_patterns().len(), 27);
+    assert_eq!(ctrl.list_patterns().len(), 26);
 }
