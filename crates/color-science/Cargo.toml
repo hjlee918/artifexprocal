@@ -5,3 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Color space conversions, DeltaE, and tone curves for display calibration"
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

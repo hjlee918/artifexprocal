@@ -7,7 +7,7 @@ license.workspace = true
 description = "Core types and contracts for the calibration engine"
 
 [dependencies]
-color-science = { path = "../color-science" }
+color-science = { path = "../color-science", features = ["serde"] }
 hal = { path = "../hal" }
 thiserror = "1"
 serde = { version = "1", features = ["derive"] }

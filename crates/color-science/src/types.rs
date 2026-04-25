@@ -1,4 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct XYZ {
     pub x: f64,
     pub y: f64,
@@ -7,6 +8,7 @@ pub struct XYZ {
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct XyY {
     pub x: f64,
     pub y: f64,
@@ -15,6 +17,7 @@ pub struct XyY {
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Lab {
     pub L: f64,
     pub a: f64,
@@ -22,6 +25,7 @@ pub struct Lab {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RGB {
     pub r: f64,
     pub g: f64,
@@ -29,6 +33,7 @@ pub struct RGB {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum WhitePoint {
     D65,
     D50,
