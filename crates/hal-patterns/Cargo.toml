@@ -1,0 +1,9 @@
+[package]
+name = "hal-patterns"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Pattern generator catalog and patch sequences for display calibration"
+
+[dependencies]
