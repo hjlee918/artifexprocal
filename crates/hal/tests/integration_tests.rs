@@ -45,6 +45,37 @@ fn test_mock_pattern_gen_compiles() {
     let _dyn_gen: &dyn PatternGenerator = &gen;
 }
 
+#[test]
+fn test_mock_end_to_end_measurement_and_upload() {
+    use color_science::types::{XYZ, RGB};
+    use hal::types::{Lut1D, RGBGain};
+
+    let mut meter = FakeMeter::with_preset(XYZ { x: 50.0, y: 75.0, z: 25.0 });
+    let mut display = FakeDisplayController::default();
+    let mut gen = FakePatternGenerator::default();
+
+    meter.connect().unwrap();
+    display.connect().unwrap();
+    gen.connect().unwrap();
+
+    gen.display_patch(&RGB { r: 1.0, g: 1.0, b: 1.0 }).unwrap();
+    let xyz = meter.read_xyz(500).unwrap();
+    assert_eq!(xyz.x, 50.0);
+
+    let lut = Lut1D {
+        channels: [vec![0.0, 1.0], vec![0.0, 1.0], vec![0.0, 1.0]],
+        size: 2,
+    };
+    display.upload_1d_lut(&lut).unwrap();
+    display.set_white_balance(RGBGain { r: 1.02, g: 1.0, b: 0.98 }).unwrap();
+
+    assert_eq!(display.uploaded_1d_luts.len(), 1);
+    assert_eq!(display.white_balance_calls.len(), 1);
+    assert_eq!(display.white_balance_calls[0].r, 1.02);
+    assert_eq!(gen.patch_history.len(), 1);
+    assert_eq!(gen.patch_history[0].r, 1.0);
+}
+
 use hal::devices::sony_projector::SonyProjectorController;
 use hal::traits::DisplayController;
 
