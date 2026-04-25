@@ -18,6 +18,8 @@ pub enum MeterError {
 
 #[derive(Debug, Error)]
 pub enum PatternGenError {
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
     #[error("Display error: {0}")]
     DisplayError(String),
 }

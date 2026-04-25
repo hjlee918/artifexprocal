@@ -19,3 +19,12 @@ pub trait Meter {
     fn read_xyz(&mut self, integration_time_ms: u32) -> Result<XYZ, MeterError>;
     fn model(&self) -> &str;
 }
+
+use crate::error::PatternGenError;
+use color_science::types::RGB;
+
+pub trait PatternGenerator {
+    fn connect(&mut self) -> Result<(), PatternGenError>;
+    fn disconnect(&mut self);
+    fn display_patch(&mut self, color: &RGB) -> Result<(), PatternGenError>;
+}

@@ -79,3 +79,26 @@ fn test_i1_display_pro_read_xyz_stub() {
     assert_eq!(xyz.y, 100.0);
     assert_eq!(xyz.z, 108.883);
 }
+
+use hal::devices::pgenerator::PGenerator;
+use hal::traits::PatternGenerator;
+
+#[test]
+fn test_pgenerator_connect_valid_ip() {
+    let mut gen = PGenerator::new("192.168.1.10");
+    assert!(gen.connect().is_ok());
+}
+
+#[test]
+fn test_pgenerator_connect_invalid_ip() {
+    let mut gen = PGenerator::new("invalid");
+    assert!(gen.connect().is_err());
+}
+
+#[test]
+fn test_pgenerator_display_patch_stub() {
+    let mut gen = PGenerator::new("192.168.1.10");
+    gen.connect().unwrap();
+    let color = color_science::types::RGB { r: 1.0, g: 0.5, b: 0.0 };
+    assert!(gen.display_patch(&color).is_ok());
+}
