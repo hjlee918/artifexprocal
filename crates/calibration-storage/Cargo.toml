@@ -8,6 +8,7 @@ description = "SQLite persistence for calibration sessions and readings"
 
 [dependencies]
 calibration-core = { path = "../calibration-core" }
+color-science = { path = "../color-science", features = ["serde"] }
 rusqlite = { version = "0.32", features = ["bundled", "uuid"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 serde_json = "1"
