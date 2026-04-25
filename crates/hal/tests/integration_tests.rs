@@ -127,3 +127,42 @@ fn test_lg_internal_display_patch_stub() {
     let color = color_science::types::RGB { r: 0.0, g: 0.0, b: 0.0 };
     assert!(gen.display_patch(&color).is_ok());
 }
+
+use hal::types::*;
+use color_science::types::RGB;
+
+#[test]
+fn test_lut1d_creation() {
+    let lut = Lut1D {
+        channels: [vec![0.0, 0.5, 1.0], vec![0.0, 0.5, 1.0], vec![0.0, 0.5, 1.0]],
+        size: 3,
+    };
+    assert_eq!(lut.size, 3);
+    assert_eq!(lut.channels[0][1], 0.5);
+}
+
+#[test]
+fn test_lut3d_creation() {
+    let lut = Lut3D {
+        data: vec![RGB { r: 1.0, g: 0.0, b: 0.0 }],
+        size: 1,
+    };
+    assert_eq!(lut.size, 1);
+    assert_eq!(lut.data[0].r, 1.0);
+}
+
+#[test]
+fn test_rgb_gain_creation() {
+    let gain = RGBGain { r: 1.02, g: 1.0, b: 0.98 };
+    assert_eq!(gain.r, 1.02);
+    assert_eq!(gain.g, 1.0);
+    assert_eq!(gain.b, 0.98);
+}
+
+#[test]
+fn test_picture_mode_enum() {
+    let mode = PictureMode::Cinema;
+    assert!(matches!(mode, PictureMode::Cinema));
+    let custom = PictureMode::Custom("ISF Day".to_string());
+    assert!(matches!(custom, PictureMode::Custom(_)));
+}
