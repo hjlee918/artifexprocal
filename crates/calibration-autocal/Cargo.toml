@@ -1,0 +1,12 @@
+[package]
+name = "calibration-autocal"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "AutoCal algorithms: greyscale analysis, LUT generation"
+
+[dependencies]
+calibration-core = { path = "../calibration-core" }
+color-science = { path = "../color-science" }
+hal = { path = "../hal" }

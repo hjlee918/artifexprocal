@@ -1,0 +1,13 @@
+[package]
+name = "calibration-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "SQLite persistence for calibration sessions and readings"
+
+[dependencies]
+calibration-core = { path = "../calibration-core" }
+rusqlite = { version = "0.32", features = ["bundled", "uuid"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+serde_json = "1"

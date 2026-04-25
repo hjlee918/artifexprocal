@@ -1,0 +1,16 @@
+[package]
+name = "calibration-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Top-level calibration orchestrator with state machine and events"
+
+[dependencies]
+calibration-core = { path = "../calibration-core" }
+calibration-storage = { path = "../calibration-storage" }
+calibration-autocal = { path = "../calibration-autocal" }
+hal = { path = "../hal" }
+color-science = { path = "../color-science" }
+tokio = { version = "1", features = ["sync", "rt"] }
+uuid = { version = "1", features = ["v4"] }
