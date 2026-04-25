@@ -55,33 +55,48 @@ impl HidContext {
         found
     }
 
-    pub fn open_device(&self, xrite: &XriteDevice) -> Result<HidDevice, HidUtilError> {
+    pub fn open_device(&self, xrite: &XriteDevice) -> Result<SyncHidDevice, HidUtilError> {
         self.api
             .open(xrite.vid, xrite.pid)
             .map_err(|e| HidUtilError::OpenFailed(e.to_string()))
+            .map(SyncHidDevice)
     }
 
-    pub fn open_by_serial(&self, xrite: &XriteDevice, serial: &str) -> Result<HidDevice, HidUtilError> {
+    pub fn open_by_serial(&self, xrite: &XriteDevice, serial: &str) -> Result<SyncHidDevice, HidUtilError> {
         self.api
             .open_serial(xrite.vid, xrite.pid, serial)
             .map_err(|e| HidUtilError::OpenFailed(e.to_string()))
+            .map(SyncHidDevice)
     }
 }
 
-pub fn send_command(device: &mut HidDevice, cmd: u8, payload: &[u8]) -> Result<(), HidUtilError> {
+pub struct SyncHidDevice(pub HidDevice);
+
+unsafe impl Send for SyncHidDevice {}
+unsafe impl Sync for SyncHidDevice {}
+
+impl SyncHidDevice {
+    pub fn inner_mut(&mut self) -> &mut HidDevice {
+        &mut self.0
+    }
+}
+
+pub fn send_command(device: &mut SyncHidDevice, cmd: u8, payload: &[u8]) -> Result<(), HidUtilError> {
     let mut report = vec![0u8; 64];
     report[0] = cmd;
     let len = payload.len().min(63);
     report[1..1 + len].copy_from_slice(&payload[..len]);
     device
+        .inner_mut()
         .write(&report)
         .map_err(|e| HidUtilError::WriteFailed(e.to_string()))?;
     Ok(())
 }
 
-pub fn read_response(device: &mut HidDevice, timeout_ms: i32) -> Result<Vec<u8>, HidUtilError> {
+pub fn read_response(device: &mut SyncHidDevice, timeout_ms: i32) -> Result<Vec<u8>, HidUtilError> {
     let mut buf = vec![0u8; 64];
     let n = device
+        .inner_mut()
         .read_timeout(&mut buf, timeout_ms)
         .map_err(|e| HidUtilError::ReadFailed(e.to_string()))?;
     buf.truncate(n);
