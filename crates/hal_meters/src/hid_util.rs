@@ -13,11 +13,8 @@ pub const I1_DISPLAY_PRO: XriteDevice = XriteDevice {
     name: "i1 Display Pro Rev.B",
 };
 
-pub const I1_PRO_2: XriteDevice = XriteDevice {
-    vid: 0x0765,
-    pid: 0x5034,
-    name: "i1 Pro 2",
-};
+// Note: i1 Pro 2 is NOT a HID device; it uses USB bulk transfer.
+// See usb_util.rs for i1 Pro 2 constants.
 
 #[derive(Debug, thiserror::Error)]
 pub enum HidUtilError {
@@ -48,8 +45,6 @@ impl HidContext {
         for info in self.api.device_list() {
             if info.vendor_id() == I1_DISPLAY_PRO.vid && info.product_id() == I1_DISPLAY_PRO.pid {
                 found.push((info.clone(), I1_DISPLAY_PRO));
-            } else if info.vendor_id() == I1_PRO_2.vid && info.product_id() == I1_PRO_2.pid {
-                found.push((info.clone(), I1_PRO_2));
             }
         }
         found

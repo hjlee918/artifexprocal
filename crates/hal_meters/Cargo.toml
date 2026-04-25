@@ -11,6 +11,7 @@ hal = { path = "../hal" }
 color-science = { path = "../color-science" }
 calibration-storage = { path = "../calibration-storage" }
 hidapi = "2.6"
+rusb = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
@@ -18,3 +19,4 @@ rusqlite = "0.32"
 
 [dev-dependencies]
 mockall = "0.13"
+hidapi = "2.6"

@@ -1,9 +1,16 @@
 use hal::traits::Meter;
 use hal::error::MeterError;
 use color_science::types::XYZ;
+
+#[cfg(not(target_os = "macos"))]
 use crate::hid_util::{HidContext, I1_DISPLAY_PRO, send_command, read_response, SyncHidDevice};
+#[cfg(not(target_os = "macos"))]
 use crate::commands::{CMD_GET_FIRMWARE, CMD_SET_EMISSIVE, CMD_TRIGGER_MEASURE, CMD_SET_INTEGRATION_TIME, XriteStatus};
 
+#[cfg(target_os = "macos")]
+use crate::argyll_adapter::{ArgyllMeter, ArgyllPort};
+
+#[cfg(not(target_os = "macos"))]
 pub struct I1DisplayPro {
     ctx: Option<HidContext>,
     device: Option<SyncHidDevice>,
@@ -12,30 +19,68 @@ pub struct I1DisplayPro {
     connected: bool,
 }
 
+#[cfg(target_os = "macos")]
+pub struct I1DisplayPro {
+    adapter: ArgyllMeter,
+    integration_time_ms: u32,
+}
+
 impl I1DisplayPro {
     pub fn new() -> Self {
-        Self {
-            ctx: None,
-            device: None,
-            serial: None,
-            integration_time_ms: 200,
-            connected: false,
+        #[cfg(not(target_os = "macos"))]
+        {
+            Self {
+                ctx: None,
+                device: None,
+                serial: None,
+                integration_time_ms: 200,
+                connected: false,
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self {
+                adapter: ArgyllMeter::new(ArgyllPort::i1_display_pro(), "i1 Display Pro Rev.B"),
+                integration_time_ms: 200,
+            }
         }
     }
 
     pub fn integration_time_ms(&self) -> u32 {
-        self.integration_time_ms
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.integration_time_ms
+        }
+        #[cfg(target_os = "macos")]
+        {
+            self.integration_time_ms
+        }
     }
 
     pub fn set_integration_time(&mut self, ms: u32) {
-        self.integration_time_ms = ms.clamp(80, 5000);
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.integration_time_ms = ms.clamp(80, 5000);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            self.integration_time_ms = ms.clamp(80, 5000);
+        }
     }
 
     pub fn serial(&self) -> Option<&str> {
-        self.serial.as_deref()
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.serial.as_deref()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            None // Argyll adapter doesn't expose serial yet
+        }
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 impl Meter for I1DisplayPro {
     fn connect(&mut self) -> Result<(), MeterError> {
         let ctx = HidContext::new().map_err(|e| MeterError::ConnectionFailed(e.to_string()))?;
@@ -127,5 +172,26 @@ impl Meter for I1DisplayPro {
 
     fn model(&self) -> &str {
         "i1 Display Pro Rev.B"
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Meter for I1DisplayPro {
+    fn connect(&mut self) -> Result<(), MeterError> {
+        self.adapter.connect()
+            .map_err(|e| MeterError::ConnectionFailed(e.to_string()))
+    }
+
+    fn disconnect(&mut self) {
+        self.adapter.disconnect();
+    }
+
+    fn read_xyz(&mut self, _integration_time_ms: u32) -> Result<XYZ, MeterError> {
+        self.adapter.read_xyz(_integration_time_ms)
+            .map_err(|e| MeterError::InvalidResponse(e.to_string()))
+    }
+
+    fn model(&self) -> &str {
+        self.adapter.model()
     }
 }
