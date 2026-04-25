@@ -1,8 +1,15 @@
-use crate::error::DisplayError;
+use crate::error::{MeterError, DisplayError, PatternGenError};
 use crate::types::{Lut1D, Lut3D, RGBGain};
-use color_science::types::XYZ;
+use color_science::types::{XYZ, RGB};
 
-pub trait DisplayController {
+pub trait Meter: Send + Sync {
+    fn connect(&mut self) -> Result<(), MeterError>;
+    fn disconnect(&mut self);
+    fn read_xyz(&mut self, integration_time_ms: u32) -> Result<XYZ, MeterError>;
+    fn model(&self) -> &str;
+}
+
+pub trait DisplayController: Send + Sync {
     fn connect(&mut self) -> Result<(), DisplayError>;
     fn disconnect(&mut self);
     fn set_picture_mode(&mut self, mode: &str) -> Result<(), DisplayError>;
@@ -11,19 +18,7 @@ pub trait DisplayController {
     fn set_white_balance(&mut self, gains: RGBGain) -> Result<(), DisplayError>;
 }
 
-use crate::error::MeterError;
-
-pub trait Meter {
-    fn connect(&mut self) -> Result<(), MeterError>;
-    fn disconnect(&mut self);
-    fn read_xyz(&mut self, integration_time_ms: u32) -> Result<XYZ, MeterError>;
-    fn model(&self) -> &str;
-}
-
-use crate::error::PatternGenError;
-use color_science::types::RGB;
-
-pub trait PatternGenerator {
+pub trait PatternGenerator: Send + Sync {
     fn connect(&mut self) -> Result<(), PatternGenError>;
     fn disconnect(&mut self);
     fn display_patch(&mut self, color: &RGB) -> Result<(), PatternGenError>;

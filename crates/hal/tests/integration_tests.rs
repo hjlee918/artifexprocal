@@ -24,6 +24,27 @@ fn test_pattern_gen_error_display() {
     assert_eq!(err.to_string(), "Display error: Patch failed");
 }
 
+use hal::traits::*;
+use hal::mocks::*;
+
+#[test]
+fn test_mock_meter_compiles() {
+    let meter = FakeMeter::default();
+    let _dyn_meter: &dyn Meter = &meter;
+}
+
+#[test]
+fn test_mock_display_compiles() {
+    let display = FakeDisplayController::default();
+    let _dyn_display: &dyn DisplayController = &display;
+}
+
+#[test]
+fn test_mock_pattern_gen_compiles() {
+    let gen = FakePatternGenerator::default();
+    let _dyn_gen: &dyn PatternGenerator = &gen;
+}
+
 use hal::devices::sony_projector::SonyProjectorController;
 use hal::traits::DisplayController;
 
