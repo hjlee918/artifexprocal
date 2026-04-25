@@ -1,3 +1,4 @@
+use crate::devices::util::is_valid_ip;
 use crate::error::PatternGenError;
 use crate::traits::PatternGenerator;
 use color_science::types::RGB;
@@ -37,12 +38,4 @@ impl PatternGenerator for LgInternalPatternGenerator {
         }
         Ok(())
     }
-}
-
-fn is_valid_ip(ip: &str) -> bool {
-    let parts: Vec<&str> = ip.split('.').collect();
-    if parts.len() != 4 {
-        return false;
-    }
-    parts.iter().all(|p| p.parse::<u8>().is_ok())
 }

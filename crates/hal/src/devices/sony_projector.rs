@@ -1,3 +1,4 @@
+use crate::devices::util::is_valid_ip;
 use crate::error::DisplayError;
 use crate::traits::DisplayController;
 use crate::types::{Lut1D, Lut3D, RGBGain};
@@ -59,12 +60,4 @@ impl DisplayController for SonyProjectorController {
         }
         Ok(())
     }
-}
-
-fn is_valid_ip(ip: &str) -> bool {
-    let parts: Vec<&str> = ip.split('.').collect();
-    if parts.len() != 4 {
-        return false;
-    }
-    parts.iter().all(|p| p.parse::<u8>().is_ok())
 }
