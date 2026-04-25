@@ -102,3 +102,12 @@ fn test_pgenerator_display_patch_stub() {
     let color = color_science::types::RGB { r: 1.0, g: 0.5, b: 0.0 };
     assert!(gen.display_patch(&color).is_ok());
 }
+
+use hal::devices::xrite_i1_pro_2::I1Pro2;
+
+#[test]
+fn test_i1_pro_2_connect() {
+    let mut meter = I1Pro2::new("/dev/ttyUSB0");
+    assert!(meter.connect().is_ok());
+    assert_eq!(meter.model(), "i1 Pro 2");
+}
