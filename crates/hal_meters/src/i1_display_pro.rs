@@ -6,6 +6,8 @@ use color_science::types::XYZ;
 use crate::hid_util::{HidContext, I1_DISPLAY_PRO, send_command, read_response, SyncHidDevice};
 #[cfg(not(target_os = "macos"))]
 use crate::commands::{CMD_GET_FIRMWARE, CMD_SET_EMISSIVE, CMD_TRIGGER_MEASURE, CMD_SET_INTEGRATION_TIME, XriteStatus};
+#[cfg(not(target_os = "macos"))]
+use crate::i1d3_unlock::i1d3_unlock;
 
 #[cfg(target_os = "macos")]
 use crate::argyll_adapter::{ArgyllMeter, ArgyllPort};
@@ -87,6 +89,10 @@ impl Meter for I1DisplayPro {
         let mut device = ctx
             .open_device(&I1_DISPLAY_PRO)
             .map_err(|e| MeterError::ConnectionFailed(e.to_string()))?;
+
+        // Attempt challenge-response unlock (required for factory-locked devices)
+        i1d3_unlock(&mut device)
+            .map_err(|e| MeterError::ConnectionFailed(format!("Unlock failed: {}", e)))?;
 
         // Verify firmware
         send_command(&mut device, CMD_GET_FIRMWARE, &[])

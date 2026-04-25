@@ -2,6 +2,7 @@ pub mod hid_util;
 pub mod usb_util;
 pub mod argyll_adapter;
 pub mod commands;
+pub mod i1d3_unlock;
 pub mod i1_display_pro;
 pub mod i1_pro_2;
 pub mod spectro_trait;

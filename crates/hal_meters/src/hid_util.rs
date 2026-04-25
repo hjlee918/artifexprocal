@@ -88,6 +88,21 @@ pub fn send_command(device: &mut SyncHidDevice, cmd: u8, payload: &[u8]) -> Resu
     Ok(())
 }
 
+/// Send a 16-bit command code (high byte in report[0], low byte in report[1]).
+/// Payload starts at report[2]. Used for i1d3 unlock protocol.
+pub fn send_command_u16(device: &mut SyncHidDevice, cmd: u16, payload: &[u8]) -> Result<(), HidUtilError> {
+    let mut report = vec![0u8; 64];
+    report[0] = ((cmd >> 8) & 0xFF) as u8;
+    report[1] = (cmd & 0xFF) as u8;
+    let len = payload.len().min(62);
+    report[2..2 + len].copy_from_slice(&payload[..len]);
+    device
+        .inner_mut()
+        .write(&report)
+        .map_err(|e| HidUtilError::WriteFailed(e.to_string()))?;
+    Ok(())
+}
+
 pub fn read_response(device: &mut SyncHidDevice, timeout_ms: i32) -> Result<Vec<u8>, HidUtilError> {
     let mut buf = vec![0u8; 64];
     let n = device
