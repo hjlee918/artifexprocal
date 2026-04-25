@@ -1,0 +1,19 @@
+[package]
+name = "hal_meters"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "X-Rite meter HID drivers (i1 Display Pro, i1 Pro 2)"
+
+[dependencies]
+hal = { path = "../hal" }
+color-science = { path = "../color-science" }
+calibration-storage = { path = "../calibration-storage" }
+hidapi = "2.6"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+
+[dev-dependencies]
+mockall = "0.13"
