@@ -63,6 +63,13 @@ impl Storage {
                 white_balance TEXT,
                 computed_at  INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS meter_initializations (
+                meter_serial TEXT PRIMARY KEY,
+                meter_model  TEXT NOT NULL,
+                last_init_at TEXT NOT NULL,
+                expires_at   TEXT NOT NULL
+            );
             "#
         )
     }
