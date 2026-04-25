@@ -1,1 +1,188 @@
-// Placeholder — will be implemented in Task 10
+use calibration_core::state::{CalibrationState, CalibrationEvent, SessionConfig, CalibrationError};
+use calibration_core::patch::{GreyscalePatchSet, PatchSet};
+use calibration_core::measure::MeasurementLoop;
+use calibration_storage::schema::Storage;
+use calibration_storage::session_store::SessionStore;
+use calibration_storage::reading_store::ReadingStore;
+use calibration_autocal::greyscale::GreyscaleAnalyzer;
+use calibration_autocal::lut::Lut1DGenerator;
+use hal::traits::{Meter, DisplayController, PatternGenerator};
+use hal::types::RGBGain;
+use color_science::types::{RGB, XYZ};
+use crate::events::EventChannel;
+use std::time::Duration;
+use std::thread;
+
+pub struct GreyscaleAutoCalFlow {
+    pub config: SessionConfig,
+    pub state: CalibrationState,
+    pub patches: Option<PatchSet>,
+    pub current_patch: usize,
+}
+
+impl GreyscaleAutoCalFlow {
+    pub fn new(config: SessionConfig) -> Self {
+        Self {
+            config,
+            state: CalibrationState::Idle,
+            patches: None,
+            current_patch: 0,
+        }
+    }
+
+    pub fn state(&self) -> &CalibrationState {
+        &self.state
+    }
+
+    pub fn start(&mut self) -> Result<(), CalibrationError> {
+        self.state = CalibrationState::Connecting;
+        Ok(())
+    }
+
+    pub fn generate_patches(&mut self) {
+        let patches = GreyscalePatchSet::new(self.config.patch_count);
+        self.patches = Some(patches);
+        self.current_patch = 0;
+    }
+
+    pub fn run_sync<M, D, P>(
+        &mut self,
+        meter: &mut M,
+        display: &mut D,
+        pattern_gen: &mut P,
+        storage: &Storage,
+        events: &EventChannel,
+    ) -> Result<(), CalibrationError>
+    where
+        M: Meter,
+        D: DisplayController,
+        P: PatternGenerator,
+    {
+        let session_store = SessionStore::new(&storage.conn);
+        let reading_store = ReadingStore::new(&storage.conn);
+
+        // Connect devices
+        self.state = CalibrationState::Connecting;
+        meter.connect().map_err(|e| CalibrationError::ConnectionFailed {
+            device: "meter".to_string(),
+            reason: e.to_string(),
+        })?;
+        events.send(CalibrationEvent::DeviceConnected { device: "meter".to_string() });
+
+        display.connect().map_err(|e| CalibrationError::ConnectionFailed {
+            device: "display".to_string(),
+            reason: e.to_string(),
+        })?;
+        events.send(CalibrationEvent::DeviceConnected { device: "display".to_string() });
+
+        pattern_gen.connect().map_err(|e| CalibrationError::ConnectionFailed {
+            device: "pattern_gen".to_string(),
+            reason: e.to_string(),
+        })?;
+        events.send(CalibrationEvent::DeviceConnected { device: "pattern_gen".to_string() });
+
+        self.state = CalibrationState::Connected;
+
+        // Create session in DB
+        let session_id = session_store.create(&self.config)
+            .map_err(|e| CalibrationError::InvalidConfig(e.to_string()))?;
+        session_store.update_state(&session_id, "measuring")
+            .map_err(|e| CalibrationError::InvalidConfig(e.to_string()))?;
+
+        // Generate patches
+        self.generate_patches();
+        let total = self.patches.as_ref().unwrap().len();
+        events.send(CalibrationEvent::ProgressUpdated { current: 0, total });
+
+        // Measurement loop
+        let mut readings: Vec<(RGB, XYZ)> = Vec::with_capacity(total);
+
+        for i in 0..total {
+            if let CalibrationState::Paused { at_patch } = self.state {
+                if at_patch == i {
+                    return Err(CalibrationError::Paused);
+                }
+            }
+
+            let patch = self.patches.as_ref().unwrap().get(i);
+            let rgb = patch.target_rgb;
+
+            pattern_gen.display_patch(&rgb).map_err(|e| CalibrationError::MeasurementFailed {
+                patch_index: i,
+                reason: e.to_string(),
+            })?;
+            events.send(CalibrationEvent::PatchDisplayed { patch_index: i, rgb });
+
+            // Settle delay
+            if self.config.settle_time_ms > 0 {
+                thread::sleep(Duration::from_millis(self.config.settle_time_ms));
+            }
+
+            self.state = CalibrationState::Measuring { current_patch: i, total_patches: total };
+
+            // Take N readings
+            let stats = MeasurementLoop::measure_sync(
+                || meter.read_xyz(500).unwrap_or(XYZ { x: 0.0, y: 0.0, z: 0.0 }),
+                self.config.reads_per_patch,
+                self.config.stability_threshold,
+            );
+
+            // Save individual readings to DB
+            for ri in 0..self.config.reads_per_patch {
+                reading_store.save(&session_id, i, ri, &stats.mean, "cal")
+                    .map_err(|e| CalibrationError::MeasurementFailed {
+                        patch_index: i,
+                        reason: e.to_string(),
+                    })?;
+            }
+
+            events.send(CalibrationEvent::ReadingsComplete {
+                patch_index: i,
+                xyz: stats.mean,
+                std_dev: stats.std_dev,
+            });
+
+            readings.push((rgb, stats.mean));
+            events.send(CalibrationEvent::ProgressUpdated { current: i + 1, total });
+        }
+
+        // Analysis
+        self.state = CalibrationState::Analyzing;
+        let analysis = GreyscaleAnalyzer::analyze(
+            &readings,
+            &self.config.target_space,
+            &self.config.white_point,
+        ).map_err(|e| CalibrationError::Analysis(e))?;
+
+        events.send(CalibrationEvent::AnalysisComplete {
+            gamma: analysis.gamma,
+            max_de: analysis.max_de,
+            white_balance_errors: analysis.white_balance_errors.clone(),
+        });
+
+        // LUT generation
+        self.state = CalibrationState::ComputingLut;
+        let lut = Lut1DGenerator::from_corrections(
+            &analysis.per_channel_corrections,
+            256,
+        );
+        events.send(CalibrationEvent::LutGenerated { size: lut.size });
+
+        // Upload
+        self.state = CalibrationState::Uploading;
+        display.upload_1d_lut(&lut).map_err(|e| CalibrationError::DisplayUpload(e.to_string()))?;
+
+        let wb_gains = RGBGain { r: 1.0, g: 1.0, b: 1.0 };
+        display.set_white_balance(wb_gains).map_err(|e| CalibrationError::DisplayUpload(e.to_string()))?;
+
+        events.send(CalibrationEvent::CorrectionsUploaded);
+
+        // Complete
+        session_store.update_state(&session_id, "finished")
+            .map_err(|e| CalibrationError::InvalidConfig(e.to_string()))?;
+        self.state = CalibrationState::Finished;
+        events.send(CalibrationEvent::SessionComplete { session_id });
+
+        Ok(())
+    }
+}
