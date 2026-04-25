@@ -1,0 +1,89 @@
+use hidapi::{HidApi, HidDevice};
+
+#[derive(Debug, Clone, Copy)]
+pub struct XriteDevice {
+    pub vid: u16,
+    pub pid: u16,
+    pub name: &'static str,
+}
+
+pub const I1_DISPLAY_PRO: XriteDevice = XriteDevice {
+    vid: 0x0765,
+    pid: 0x5020,
+    name: "i1 Display Pro Rev.B",
+};
+
+pub const I1_PRO_2: XriteDevice = XriteDevice {
+    vid: 0x0765,
+    pid: 0x5034,
+    name: "i1 Pro 2",
+};
+
+#[derive(Debug, thiserror::Error)]
+pub enum HidUtilError {
+    #[error("HID API init failed: {0}")]
+    ApiInit(String),
+    #[error("Device not found: {name} (VID {vid:04X}, PID {pid:04X})")]
+    DeviceNotFound { name: String, vid: u16, pid: u16 },
+    #[error("HID open failed: {0}")]
+    OpenFailed(String),
+    #[error("Write failed: {0}")]
+    WriteFailed(String),
+    #[error("Read failed: {0}")]
+    ReadFailed(String),
+}
+
+pub struct HidContext {
+    api: HidApi,
+}
+
+impl HidContext {
+    pub fn new() -> Result<Self, HidUtilError> {
+        let api = HidApi::new().map_err(|e| HidUtilError::ApiInit(e.to_string()))?;
+        Ok(Self { api })
+    }
+
+    pub fn enumerate_xrite(&self) -> Vec<(hidapi::DeviceInfo, XriteDevice)> {
+        let mut found = Vec::new();
+        for info in self.api.device_list() {
+            if info.vendor_id() == I1_DISPLAY_PRO.vid && info.product_id() == I1_DISPLAY_PRO.pid {
+                found.push((info.clone(), I1_DISPLAY_PRO));
+            } else if info.vendor_id() == I1_PRO_2.vid && info.product_id() == I1_PRO_2.pid {
+                found.push((info.clone(), I1_PRO_2));
+            }
+        }
+        found
+    }
+
+    pub fn open_device(&self, xrite: &XriteDevice) -> Result<HidDevice, HidUtilError> {
+        self.api
+            .open(xrite.vid, xrite.pid)
+            .map_err(|e| HidUtilError::OpenFailed(e.to_string()))
+    }
+
+    pub fn open_by_serial(&self, xrite: &XriteDevice, serial: &str) -> Result<HidDevice, HidUtilError> {
+        self.api
+            .open_serial(xrite.vid, xrite.pid, serial)
+            .map_err(|e| HidUtilError::OpenFailed(e.to_string()))
+    }
+}
+
+pub fn send_command(device: &mut HidDevice, cmd: u8, payload: &[u8]) -> Result<(), HidUtilError> {
+    let mut report = vec![0u8; 64];
+    report[0] = cmd;
+    let len = payload.len().min(63);
+    report[1..1 + len].copy_from_slice(&payload[..len]);
+    device
+        .write(&report)
+        .map_err(|e| HidUtilError::WriteFailed(e.to_string()))?;
+    Ok(())
+}
+
+pub fn read_response(device: &mut HidDevice, timeout_ms: i32) -> Result<Vec<u8>, HidUtilError> {
+    let mut buf = vec![0u8; 64];
+    let n = device
+        .read_timeout(&mut buf, timeout_ms)
+        .map_err(|e| HidUtilError::ReadFailed(e.to_string()))?;
+    buf.truncate(n);
+    Ok(buf)
+}
