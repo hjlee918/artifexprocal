@@ -2,6 +2,7 @@
 mod tests {
     use crate::service::CalibrationService;
     use crate::ipc::models::CalibrationState;
+    use calibration_core::state::SessionConfig;
 
     #[test]
     fn test_connect_meter_known() {
@@ -89,5 +90,44 @@ mod tests {
         assert!(matches!(service.get_state(), CalibrationState::Measuring));
         service.set_state(CalibrationState::Idle);
         assert!(matches!(service.get_state(), CalibrationState::Idle));
+    }
+
+    #[test]
+    fn test_start_calibration_session_returns_id() {
+        let service = CalibrationService::new();
+        let config = SessionConfig::default();
+        let id = service.start_calibration_session(config).unwrap();
+        assert!(!id.is_empty());
+        assert!(id.starts_with("cal-"));
+    }
+
+    #[test]
+    fn test_second_session_returns_in_progress_error() {
+        let service = CalibrationService::new();
+        let config = SessionConfig::default();
+        let _ = service.start_calibration_session(config.clone()).unwrap();
+        let result = service.start_calibration_session(config);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("already in progress"));
+    }
+
+    #[test]
+    fn test_get_active_session_id() {
+        let service = CalibrationService::new();
+        assert_eq!(service.get_active_session_id(), None);
+        let config = SessionConfig::default();
+        let id = service.start_calibration_session(config).unwrap();
+        assert_eq!(service.get_active_session_id(), Some(id));
+    }
+
+    #[test]
+    fn test_end_session_clears_active() {
+        let service = CalibrationService::new();
+        let config = SessionConfig::default();
+        let _ = service.start_calibration_session(config).unwrap();
+        assert!(service.get_active_session_id().is_some());
+        service.end_session();
+        assert_eq!(service.get_active_session_id(), None);
     }
 }

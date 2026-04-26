@@ -1,13 +1,10 @@
 use crate::ipc::models::{CalibrationState, DisplayInfo, MeterInfo};
 use crate::service::error::CalibrationError;
-use calibration_core::state::{CalibrationEvent, SessionConfig};
-use calibration_engine::autocal_flow::GreyscaleAutoCalFlow;
-use calibration_engine::events::EventChannel;
+use calibration_core::state::SessionConfig;
 use color_science::types::{RGB, XYZ};
 use hal::traits::{DisplayController, Meter};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use std::time::Duration;
 
 struct CalibrationSession {
     session_id: String,
