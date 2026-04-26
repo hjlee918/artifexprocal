@@ -1,3 +1,4 @@
+pub mod bindings_export;
 pub mod ipc;
 pub mod service;
 
