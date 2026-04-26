@@ -1,5 +1,13 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import {
+  EVENT_DEVICE_STATUS_CHANGED,
+  EVENT_CALIBRATION_STATE_CHANGED,
+  EVENT_ERROR_OCCURRED,
+  type DeviceStatusEvent,
+  type CalibrationStateEvent,
+  type ErrorEvent,
+} from "../bindings";
 import { useDashboardStore } from "../store/useDashboardStore";
 
 export function useTauriEvents() {
@@ -13,13 +21,8 @@ export function useTauriEvents() {
     const unsubs: (() => void)[] = [];
 
     Promise.all([
-      listen("device-status-changed", (event) => {
-        const payload = event.payload as {
-          device_id: string;
-          device_type: string;
-          connected: boolean;
-          info: string;
-        };
+      listen<DeviceStatusEvent>(EVENT_DEVICE_STATUS_CHANGED, (event) => {
+        const payload = event.payload;
         const status = {
           id: payload.device_id,
           name: payload.info,
@@ -32,21 +35,12 @@ export function useTauriEvents() {
           setDisplayStatus(status);
         }
       }),
-      listen("calibration-state-changed", (event) => {
-        const payload = event.payload as {
-          old_state: string;
-          new_state: string;
-          message: string;
-        };
-        setCalibrationState(payload.new_state);
+      listen<CalibrationStateEvent>(EVENT_CALIBRATION_STATE_CHANGED, (event) => {
+        setCalibrationState(event.payload.new_state);
       }),
-      listen("error-occurred", (event) => {
-        const payload = event.payload as {
-          severity: string;
-          message: string;
-          source: string;
-        };
-        setLastError(`${payload.severity}: ${payload.message}`);
+      listen<ErrorEvent>(EVENT_ERROR_OCCURRED, (event) => {
+        const p = event.payload;
+        setLastError(`${p.severity}: ${p.message}`);
       }),
     ]).then((listeners) => {
       if (!cancelled) {
