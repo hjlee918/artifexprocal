@@ -23,10 +23,9 @@ describe("Sidebar", () => {
         <Sidebar />
       </BrowserRouter>
     );
+    const sidebar = screen.getByText("ArtifexProCal").closest("aside");
     const toggleBtn = screen.getAllByRole("button")[0];
     fireEvent.click(toggleBtn);
-    // After collapse, labels should still be in DOM but sidebar width changes
-    const sidebar = screen.getByText("ArtifexProCal").closest("aside");
     expect(sidebar).toHaveStyle("width: 64px");
   });
 });

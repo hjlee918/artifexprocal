@@ -49,6 +49,7 @@ pub struct DeviceInfo {
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
 pub struct DeviceStatusEvent {
     pub device_id: String,
+    pub device_type: String,
     pub connected: bool,
     pub info: String,
 }

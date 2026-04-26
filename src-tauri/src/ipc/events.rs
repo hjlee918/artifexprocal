@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter};
 pub fn emit_device_status_changed(
     app: &AppHandle,
     device_id: String,
+    device_type: String,
     connected: bool,
     info: String,
 ) {
@@ -13,6 +14,7 @@ pub fn emit_device_status_changed(
         "device-status-changed",
         DeviceStatusEvent {
             device_id,
+            device_type,
             connected,
             info,
         },

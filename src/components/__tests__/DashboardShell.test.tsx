@@ -18,24 +18,24 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 describe("DashboardShell", () => {
-  it("renders sidebar, topbar, and footer", () => {
+  it("renders sidebar, topbar, and footer", async () => {
     render(
       <BrowserRouter>
         <DashboardShell />
       </BrowserRouter>
     );
-    expect(screen.getByText("ArtifexProCal")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("v0.1.0-alpha")).toBeInTheDocument();
+    expect(await screen.findByText("ArtifexProCal")).toBeInTheDocument();
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument();
+    expect(await screen.findByText("v0.1.0-alpha")).toBeInTheDocument();
   });
 
-  it("shows disconnected status by default", () => {
+  it("shows disconnected status by default", async () => {
     render(
       <BrowserRouter>
         <DashboardShell />
       </BrowserRouter>
     );
-    expect(screen.getByText("No meter")).toBeInTheDocument();
-    expect(screen.getByText("No display")).toBeInTheDocument();
+    expect(await screen.findByText("No meter")).toBeInTheDocument();
+    expect(await screen.findByText("No display")).toBeInTheDocument();
   });
 });

@@ -16,6 +16,7 @@ export function useTauriEvents() {
     listen("device-status-changed", (event) => {
       const payload = event.payload as {
         device_id: string;
+        device_type: string;
         connected: boolean;
         info: string;
       };
@@ -23,7 +24,7 @@ export function useTauriEvents() {
         id: payload.device_id,
         name: payload.info,
         connected: payload.connected,
-        type: payload.device_id.includes("display") ? "display" : "meter",
+        type: payload.device_type === "display" ? "display" : "meter",
       } as const;
       if (status.type === "meter") {
         setMeterStatus(status);

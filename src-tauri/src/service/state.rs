@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 pub struct CalibrationService {
     meter: Arc<Mutex<Option<Box<dyn Meter + Send>>>>,
+    meter_info: Arc<Mutex<Option<MeterInfo>>>,
     display: Arc<Mutex<Option<Box<dyn DisplayController + Send>>>>,
+    display_info: Arc<Mutex<Option<DisplayInfo>>>,
     state: Arc<Mutex<CalibrationState>>,
 }
 
@@ -20,7 +22,9 @@ impl CalibrationService {
     pub fn new() -> Self {
         Self {
             meter: Arc::new(Mutex::new(None)),
+            meter_info: Arc::new(Mutex::new(None)),
             display: Arc::new(Mutex::new(None)),
+            display_info: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(CalibrationState::Idle)),
         }
     }
@@ -56,13 +60,15 @@ impl CalibrationService {
         let _ = fake.connect();
         *self.meter.lock() = Some(Box::new(fake));
 
-        Ok(MeterInfo {
+        let info = MeterInfo {
             id: id.to_string(),
             name: name.to_string(),
             serial: None,
             connected: true,
             capabilities: caps,
-        })
+        };
+        *self.meter_info.lock() = Some(info.clone());
+        Ok(info)
     }
 
     pub fn disconnect_meter(&self, _meter_id: &str) -> Result<(), CalibrationError> {
@@ -70,19 +76,13 @@ impl CalibrationService {
             meter.disconnect();
         }
         *self.meter.lock() = None;
+        *self.meter_info.lock() = None;
         Ok(())
     }
 
     pub fn get_meter_info(&self) -> Vec<MeterInfo> {
-        let guard = self.meter.lock();
-        match guard.as_ref() {
-            Some(meter) => vec![MeterInfo {
-                id: meter.model().to_string(),
-                name: meter.model().to_string(),
-                serial: None,
-                connected: true,
-                capabilities: vec!["emissive".into(), "xyz".into()],
-            }],
+        match self.meter_info.lock().as_ref() {
+            Some(info) => vec![info.clone()],
             None => vec![],
         }
     }
@@ -102,13 +102,15 @@ impl CalibrationService {
         let _ = fake.connect();
         *self.display.lock() = Some(Box::new(fake));
 
-        Ok(DisplayInfo {
+        let info = DisplayInfo {
             id: id.to_string(),
             name: name.to_string(),
             model: model.to_string(),
             connected: true,
             picture_mode: None,
-        })
+        };
+        *self.display_info.lock() = Some(info.clone());
+        Ok(info)
     }
 
     pub fn disconnect_display(&self, _display_id: &str) -> Result<(), CalibrationError> {
@@ -116,19 +118,13 @@ impl CalibrationService {
             display.disconnect();
         }
         *self.display.lock() = None;
+        *self.display_info.lock() = None;
         Ok(())
     }
 
     pub fn get_display_info(&self) -> Vec<DisplayInfo> {
-        let guard = self.display.lock();
-        match guard.as_ref() {
-            Some(_) => vec![DisplayInfo {
-                id: "connected-display".to_string(),
-                name: "Connected Display".to_string(),
-                model: "Unknown".to_string(),
-                connected: true,
-                picture_mode: None,
-            }],
+        match self.display_info.lock().as_ref() {
+            Some(info) => vec![info.clone()],
             None => vec![],
         }
     }
