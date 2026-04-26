@@ -22,7 +22,17 @@ fn compute_xyy(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![compute_delta_e, compute_xyy])
+        .manage(service::state::CalibrationService::new())
+        .invoke_handler(tauri::generate_handler![
+            compute_delta_e,
+            compute_xyy,
+            ipc::commands::get_app_state,
+            ipc::commands::connect_meter,
+            ipc::commands::disconnect_meter,
+            ipc::commands::connect_display,
+            ipc::commands::disconnect_display,
+            ipc::commands::get_device_inventory,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
