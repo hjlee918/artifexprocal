@@ -65,7 +65,7 @@ pub fn emit_calibration_progress(
     session_id: String,
     current_patch: usize,
     total_patches: usize,
-    patch: String,
+    patch_name: String,
     yxy: Option<(f64, f64, f64)>,
     stable: bool,
 ) {
@@ -75,7 +75,7 @@ pub fn emit_calibration_progress(
             session_id,
             current_patch,
             total_patches,
-            patch,
+            patch_name,
             yxy,
             stable,
         },
