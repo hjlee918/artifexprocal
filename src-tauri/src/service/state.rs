@@ -1,8 +1,19 @@
 use crate::ipc::models::{CalibrationState, DisplayInfo, MeterInfo};
 use crate::service::error::CalibrationError;
+use calibration_core::state::{CalibrationEvent, SessionConfig};
+use calibration_engine::autocal_flow::GreyscaleAutoCalFlow;
+use calibration_engine::events::EventChannel;
+use color_science::types::{RGB, XYZ};
 use hal::traits::{DisplayController, Meter};
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::time::Duration;
+
+struct CalibrationSession {
+    session_id: String,
+    config: SessionConfig,
+    pre_readings: Vec<(RGB, XYZ)>,
+}
 
 pub struct CalibrationService {
     meter: Arc<Mutex<Option<Box<dyn Meter + Send>>>>,
@@ -11,6 +22,7 @@ pub struct CalibrationService {
     display_info: Arc<Mutex<Option<DisplayInfo>>>,
     state: Arc<Mutex<CalibrationState>>,
     use_mocks: bool,
+    active_session: Arc<Mutex<Option<CalibrationSession>>>,
 }
 
 impl Default for CalibrationService {
@@ -32,6 +44,7 @@ impl CalibrationService {
             display_info: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(CalibrationState::Idle)),
             use_mocks,
+            active_session: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -41,6 +54,31 @@ impl CalibrationService {
 
     pub fn set_state(&self, state: CalibrationState) {
         *self.state.lock() = state;
+    }
+
+    pub fn start_calibration_session(
+        &self,
+        config: SessionConfig,
+    ) -> Result<String, CalibrationError> {
+        let mut guard = self.active_session.lock();
+        if guard.is_some() {
+            return Err(CalibrationError::SessionInProgress);
+        }
+        let session_id = format!("cal-{}", uuid::Uuid::new_v4());
+        *guard = Some(CalibrationSession {
+            session_id: session_id.clone(),
+            config,
+            pre_readings: Vec::new(),
+        });
+        Ok(session_id)
+    }
+
+    pub fn get_active_session_id(&self) -> Option<String> {
+        self.active_session.lock().as_ref().map(|s| s.session_id.clone())
+    }
+
+    pub fn end_session(&self) {
+        *self.active_session.lock() = None;
     }
 
     pub fn connect_meter(&self, meter_id: &str) -> Result<MeterInfo, CalibrationError> {
