@@ -17,6 +17,9 @@ Cargo.lock
 .claude/settings.local.json
 .mcp.json
 
+# Session artifacts
+.superpowers/
+
 # Logs
 *.log
 # Logs
