@@ -21,6 +21,6 @@ serde_json = "1"
 color-science = { path = "../crates/color-science" }
 thiserror = "2"
 parking_lot = "0.12"
-specta = "2"
-tauri-specta = { version = "2", features = ["typescript", "javascript"] }
+specta = "=2.0.0-rc.24"
+tauri-specta = { version = "=2.0.0-rc.24", features = ["typescript", "javascript"] }
 hal = { path = "../crates/hal" }
