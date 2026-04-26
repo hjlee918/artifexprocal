@@ -92,11 +92,23 @@ mod tests {
         assert!(matches!(service.get_state(), CalibrationState::Idle));
     }
 
+    fn test_session_config() -> SessionConfig {
+        SessionConfig {
+            name: "test".into(),
+            target_space: calibration_core::state::TargetSpace::Bt709,
+            tone_curve: calibration_core::state::ToneCurve::Gamma(2.4),
+            white_point: calibration_core::state::WhitePoint::D65,
+            patch_count: 21,
+            reads_per_patch: 5,
+            settle_time_ms: 1000,
+            stability_threshold: None,
+        }
+    }
+
     #[test]
     fn test_start_calibration_session_returns_id() {
         let service = CalibrationService::new();
-        let config = SessionConfig::default();
-        let id = service.start_calibration_session(config).unwrap();
+        let id = service.start_calibration_session(test_session_config()).unwrap();
         assert!(!id.is_empty());
         assert!(id.starts_with("cal-"));
     }
@@ -104,9 +116,8 @@ mod tests {
     #[test]
     fn test_second_session_returns_in_progress_error() {
         let service = CalibrationService::new();
-        let config = SessionConfig::default();
-        let _ = service.start_calibration_session(config.clone()).unwrap();
-        let result = service.start_calibration_session(config);
+        let _ = service.start_calibration_session(test_session_config()).unwrap();
+        let result = service.start_calibration_session(test_session_config());
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("already in progress"));
@@ -116,16 +127,14 @@ mod tests {
     fn test_get_active_session_id() {
         let service = CalibrationService::new();
         assert_eq!(service.get_active_session_id(), None);
-        let config = SessionConfig::default();
-        let id = service.start_calibration_session(config).unwrap();
+        let id = service.start_calibration_session(test_session_config()).unwrap();
         assert_eq!(service.get_active_session_id(), Some(id));
     }
 
     #[test]
     fn test_end_session_clears_active() {
         let service = CalibrationService::new();
-        let config = SessionConfig::default();
-        let _ = service.start_calibration_session(config).unwrap();
+        let _ = service.start_calibration_session(test_session_config()).unwrap();
         assert!(service.get_active_session_id().is_some());
         service.end_session();
         assert_eq!(service.get_active_session_id(), None);

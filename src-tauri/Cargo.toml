@@ -27,5 +27,4 @@ hal = { path = "../crates/hal" }
 hal_meters = { path = "../crates/hal_meters" }
 hal-displays = { path = "../crates/hal-displays" }
 calibration-core = { path = "../crates/calibration-core" }
-calibration-engine = { path = "../crates/calibration-engine" }
 uuid = { version = "1", features = ["v4"] }
