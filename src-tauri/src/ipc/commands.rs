@@ -117,7 +117,8 @@ pub fn start_calibration(
         target_space: match config.target_space.as_str() {
             "Rec.2020" => calibration_core::state::TargetSpace::Bt2020,
             "DCI-P3" => calibration_core::state::TargetSpace::DciP3,
-            _ => calibration_core::state::TargetSpace::Bt709,
+            "Rec.709" => calibration_core::state::TargetSpace::Bt709,
+            _ => return Err(format!("Invalid target_space: {}", config.target_space)),
         },
         tone_curve: match config.tone_curve.as_str() {
             "Gamma 2.2" => calibration_core::state::ToneCurve::Gamma(2.2),
@@ -125,12 +126,13 @@ pub fn start_calibration(
             "BT.1886" => calibration_core::state::ToneCurve::Bt1886,
             "PQ" => calibration_core::state::ToneCurve::Pq,
             "HLG" => calibration_core::state::ToneCurve::Hlg,
-            _ => calibration_core::state::ToneCurve::Gamma(2.4),
+            _ => return Err(format!("Invalid tone_curve: {}", config.tone_curve)),
         },
         white_point: match config.white_point.as_str() {
             "D50" => calibration_core::state::WhitePoint::D50,
             "DCI" => calibration_core::state::WhitePoint::Dci,
-            _ => calibration_core::state::WhitePoint::D65,
+            "D65" => calibration_core::state::WhitePoint::D65,
+            _ => return Err(format!("Invalid white_point: {}", config.white_point)),
         },
         patch_count: config.patch_count,
         reads_per_patch: config.reads_per_patch,
@@ -169,7 +171,7 @@ pub fn abort_calibration(
     session_id: String,
 ) -> Result<(), String> {
     if service.get_active_session_id() != Some(session_id) {
-        return Err("Session not found".to_string());
+        return Err(crate::service::error::CalibrationError::SessionNotFound(session_id).to_string());
     }
     service.end_session();
     Ok(())
