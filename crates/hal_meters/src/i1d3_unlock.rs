@@ -73,10 +73,11 @@ pub fn i1d3_unlock(device: &mut SyncHidDevice) -> Result<(), UnlockError> {
         let response = create_unlock_response(sc, k0, k1);
 
         let mut report_payload = [0u8; 64];
-        // Encode response at offset 24, XORed with challenge byte at offset 2
+        // Encode response at payload offset 22, so that send_command_u16
+        // places it at HID report offset 24 (payload starts at report[2]).
         let encode_key = challenge[2];
         for i in 0..16 {
-            report_payload[24 + i] = response[i] ^ encode_key;
+            report_payload[22 + i] = response[i] ^ encode_key;
         }
 
         send_command_u16(device, CMD_LOCK_RESPONSE, &report_payload)?;
