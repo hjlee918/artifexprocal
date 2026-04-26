@@ -71,11 +71,19 @@ impl CalibrationService {
         Ok(info)
     }
 
-    pub fn disconnect_meter(&self, _meter_id: &str) -> Result<(), CalibrationError> {
-        if let Some(meter) = self.meter.lock().as_mut() {
+    pub fn disconnect_meter(&self, meter_id: &str) -> Result<(), CalibrationError> {
+        {
+            let guard = self.meter_info.lock();
+            if guard.as_ref().map_or(true, |i| i.id != meter_id) {
+                return Err(CalibrationError::MeterNotFound(meter_id.to_string()));
+            }
+        }
+        let mut guard = self.meter.lock();
+        if let Some(meter) = guard.as_mut() {
             meter.disconnect();
         }
-        *self.meter.lock() = None;
+        *guard = None;
+        drop(guard);
         *self.meter_info.lock() = None;
         Ok(())
     }
@@ -113,11 +121,19 @@ impl CalibrationService {
         Ok(info)
     }
 
-    pub fn disconnect_display(&self, _display_id: &str) -> Result<(), CalibrationError> {
-        if let Some(display) = self.display.lock().as_mut() {
+    pub fn disconnect_display(&self, display_id: &str) -> Result<(), CalibrationError> {
+        {
+            let guard = self.display_info.lock();
+            if guard.as_ref().map_or(true, |i| i.id != display_id) {
+                return Err(CalibrationError::DisplayNotFound(display_id.to_string()));
+            }
+        }
+        let mut guard = self.display.lock();
+        if let Some(display) = guard.as_mut() {
             display.disconnect();
         }
-        *self.display.lock() = None;
+        *guard = None;
+        drop(guard);
         *self.display_info.lock() = None;
         Ok(())
     }

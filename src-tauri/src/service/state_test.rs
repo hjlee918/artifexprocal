@@ -26,8 +26,16 @@ mod tests {
         let service = CalibrationService::new();
         service.connect_meter("i1-display-pro").unwrap();
         assert_eq!(service.get_meter_info().len(), 1);
-        service.disconnect_meter("any").unwrap();
+        service.disconnect_meter("i1-display-pro").unwrap();
         assert_eq!(service.get_meter_info().len(), 0);
+    }
+
+    #[test]
+    fn test_disconnect_meter_wrong_id() {
+        let service = CalibrationService::new();
+        service.connect_meter("i1-display-pro").unwrap();
+        let result = service.disconnect_meter("wrong");
+        assert!(result.is_err());
     }
 
     #[test]
@@ -54,6 +62,14 @@ mod tests {
         assert_eq!(service.get_display_info().len(), 1);
         service.disconnect_display("lg-oled").unwrap();
         assert_eq!(service.get_display_info().len(), 0);
+    }
+
+    #[test]
+    fn test_disconnect_display_wrong_id() {
+        let service = CalibrationService::new();
+        service.connect_display("lg-oled").unwrap();
+        let result = service.disconnect_display("wrong");
+        assert!(result.is_err());
     }
 
     #[test]

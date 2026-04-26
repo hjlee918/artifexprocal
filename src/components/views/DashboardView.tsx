@@ -2,7 +2,9 @@ import { useDashboardStore } from "../../store/useDashboardStore";
 import { Zap, Plug, Monitor } from "lucide-react";
 
 export function DashboardView() {
-  const { meterStatus, displayStatus, calibrationState } = useDashboardStore();
+  const meterStatus = useDashboardStore((s) => s.meterStatus);
+  const displayStatus = useDashboardStore((s) => s.displayStatus);
+  const calibrationState = useDashboardStore((s) => s.calibrationState);
 
   return (
     <div className="space-y-6">

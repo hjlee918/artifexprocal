@@ -12,8 +12,10 @@ function StatusDot({ connected }: { connected: boolean }) {
 }
 
 export function TopBar() {
-  const { meterStatus, displayStatus, calibrationState, activeRoute } =
-    useDashboardStore();
+  const meterStatus = useDashboardStore((s) => s.meterStatus);
+  const displayStatus = useDashboardStore((s) => s.displayStatus);
+  const calibrationState = useDashboardStore((s) => s.calibrationState);
+  const activeRoute = useDashboardStore((s) => s.activeRoute);
 
   const routeTitles: Record<string, string> = {
     "/": "Dashboard",

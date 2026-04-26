@@ -20,7 +20,9 @@ const navItems: { route: Route; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function Sidebar() {
-  const { sidebarExpanded, toggleSidebar, activeRoute } = useDashboardStore();
+  const sidebarExpanded = useDashboardStore((s) => s.sidebarExpanded);
+  const toggleSidebar = useDashboardStore((s) => s.toggleSidebar);
+  const activeRoute = useDashboardStore((s) => s.activeRoute);
 
   return (
     <aside

@@ -26,8 +26,10 @@ interface AppState {
 }
 
 export function useAppState() {
-  const { setMeterStatus, setDisplayStatus, setCalibrationState, setLastError } =
-    useDashboardStore();
+  const setMeterStatus = useDashboardStore((s) => s.setMeterStatus);
+  const setDisplayStatus = useDashboardStore((s) => s.setDisplayStatus);
+  const setCalibrationState = useDashboardStore((s) => s.setCalibrationState);
+  const setLastError = useDashboardStore((s) => s.setLastError);
 
   const refresh = useCallback(async () => {
     try {
