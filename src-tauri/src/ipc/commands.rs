@@ -129,11 +129,7 @@ pub fn start_calibration(
         },
         white_point: match config.white_point.as_str() {
             "D50" => calibration_core::state::WhitePoint::D50,
-            "DCI" => calibration_core::state::WhitePoint::Custom(color_science::types::XYZ {
-                x: 0.314,
-                y: 0.351,
-                z: 0.335,
-            }),
+            "DCI" => calibration_core::state::WhitePoint::Dci,
             _ => calibration_core::state::WhitePoint::D65,
         },
         patch_count: config.patch_count,

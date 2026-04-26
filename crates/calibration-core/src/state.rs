@@ -23,6 +23,7 @@ pub enum ToneCurve {
 pub enum WhitePoint {
     D65,
     D50,
+    Dci,
     Custom(XYZ),
 }
 
