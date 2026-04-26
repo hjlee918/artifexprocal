@@ -1,3 +1,6 @@
+pub mod ipc;
+pub mod service;
+
 use color_science::types::{Lab, XYZ};
 use color_science::delta_e::delta_e_2000;
 
