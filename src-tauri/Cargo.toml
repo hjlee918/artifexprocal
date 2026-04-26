@@ -24,3 +24,5 @@ parking_lot = "0.12"
 specta = "=2.0.0-rc.24"
 tauri-specta = { version = "=2.0.0-rc.24", features = ["typescript", "javascript"] }
 hal = { path = "../crates/hal" }
+hal_meters = { path = "../crates/hal_meters" }
+hal-displays = { path = "../crates/hal-displays" }

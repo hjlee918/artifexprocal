@@ -10,6 +10,7 @@ pub struct CalibrationService {
     display: Arc<Mutex<Option<Box<dyn DisplayController + Send>>>>,
     display_info: Arc<Mutex<Option<DisplayInfo>>>,
     state: Arc<Mutex<CalibrationState>>,
+    use_mocks: bool,
 }
 
 impl Default for CalibrationService {
@@ -20,12 +21,17 @@ impl Default for CalibrationService {
 
 impl CalibrationService {
     pub fn new() -> Self {
+        Self::with_mocks(true)
+    }
+
+    pub fn with_mocks(use_mocks: bool) -> Self {
         Self {
             meter: Arc::new(Mutex::new(None)),
             meter_info: Arc::new(Mutex::new(None)),
             display: Arc::new(Mutex::new(None)),
             display_info: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(CalibrationState::Idle)),
+            use_mocks,
         }
     }
 
@@ -56,10 +62,6 @@ impl CalibrationService {
             .find(|(id, _, _)| *id == meter_id)
             .ok_or_else(|| CalibrationError::MeterNotFound(meter_id.to_string()))?;
 
-        let mut fake = hal::mocks::FakeMeter::default();
-        let _ = fake.connect();
-        *self.meter.lock() = Some(Box::new(fake));
-
         let info = MeterInfo {
             id: id.to_string(),
             name: name.to_string(),
@@ -67,6 +69,21 @@ impl CalibrationService {
             connected: true,
             capabilities: caps,
         };
+
+        if self.use_mocks {
+            let mut fake = hal::mocks::FakeMeter::default();
+            let _ = fake.connect();
+            *self.meter.lock() = Some(Box::new(fake));
+        } else {
+            let mut real: Box<dyn Meter + Send> = match meter_id {
+                "i1-display-pro" => Box::new(hal_meters::i1_display_pro::I1DisplayPro::new()),
+                "i1-pro-2" => Box::new(hal_meters::i1_pro_2::I1Pro2::new()),
+                _ => unreachable!(),
+            };
+            real.connect().map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            *self.meter.lock() = Some(real);
+        }
+
         *self.meter_info.lock() = Some(info.clone());
         Ok(info)
     }
@@ -106,10 +123,6 @@ impl CalibrationService {
             .find(|(id, _, _)| *id == display_id)
             .ok_or_else(|| CalibrationError::DisplayNotFound(display_id.to_string()))?;
 
-        let mut fake = hal::mocks::FakeDisplayController::default();
-        let _ = fake.connect();
-        *self.display.lock() = Some(Box::new(fake));
-
         let info = DisplayInfo {
             id: id.to_string(),
             name: name.to_string(),
@@ -117,6 +130,20 @@ impl CalibrationService {
             connected: true,
             picture_mode: None,
         };
+
+        if self.use_mocks {
+            let mut fake = hal::mocks::FakeDisplayController::default();
+            let _ = fake.connect();
+            *self.display.lock() = Some(Box::new(fake));
+        } else if display_id == "lg-oled" {
+            let mut real = hal_displays::lg_oled::LgOledController::devicecontrol(3000);
+            real.connect().map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            *self.display.lock() = Some(Box::new(real));
+        } else {
+            // Sony projector not yet implemented as real driver
+            return Err(CalibrationError::DisplayNotFound(display_id.to_string()));
+        }
+
         *self.display_info.lock() = Some(info.clone());
         Ok(info)
     }

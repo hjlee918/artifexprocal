@@ -1,29 +1,11 @@
 import { useCallback, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  getAppState,
+  type AppState,
+  type MeterInfo,
+  type DisplayInfo,
+} from "../bindings";
 import { useDashboardStore } from "../store/useDashboardStore";
-
-interface MeterInfo {
-  id: string;
-  name: string;
-  serial: string | null;
-  connected: boolean;
-  capabilities: string[];
-}
-
-interface DisplayInfo {
-  id: string;
-  name: string;
-  model: string;
-  connected: boolean;
-  picture_mode: string | null;
-}
-
-interface AppState {
-  meters: MeterInfo[];
-  displays: DisplayInfo[];
-  calibration_state: string;
-  last_error: string | null;
-}
 
 export function useAppState() {
   const setMeterStatus = useDashboardStore((s) => s.setMeterStatus);
@@ -33,7 +15,7 @@ export function useAppState() {
 
   const refresh = useCallback(async () => {
     try {
-      const state = await invoke<AppState>("get_app_state");
+      const state = await getAppState();
       if (state.meters.length > 0) {
         const m = state.meters[0];
         setMeterStatus({
