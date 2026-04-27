@@ -116,6 +116,7 @@ export function CalibrateView() {
           <AnalysisStep
             readings={state.readings}
             analysis={state.analysis}
+            targetSpace={state.config?.target_space}
             onApply={handleApplyCorrections}
             onRemeasure={() => setState((s) => ({ ...s, step: "target" }))}
           />

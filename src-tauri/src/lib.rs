@@ -6,6 +6,7 @@ use color_science::types::{Lab, XYZ};
 use color_science::delta_e::delta_e_2000;
 
 #[tauri::command]
+#[specta::specta]
 fn compute_delta_e(l1: f64, a1: f64, b1: f64, l2: f64, a2: f64, b2: f64) -> f64 {
     let lab1 = Lab { L: l1, a: a1, b: b1 };
     let lab2 = Lab { L: l2, a: a2, b: b2 };
@@ -13,6 +14,7 @@ fn compute_delta_e(l1: f64, a1: f64, b1: f64, l2: f64, a2: f64, b2: f64) -> f64 
 }
 
 #[tauri::command]
+#[specta::specta]
 fn compute_xyy(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     let xyz = XYZ { x, y, z };
     let xyy = xyz.to_xyy();

@@ -215,11 +215,35 @@ pub fn get_spectral_locus(diagram: String) -> Result<Vec<(f64, f64)>, String> {
 #[tauri::command]
 #[specta::specta]
 pub fn get_target_gamut(target_space: String) -> Result<crate::ipc::models::GamutDto, String> {
+    use crate::ipc::models::Chromaticity;
+
     let (r, g, b, w) = match target_space.as_str() {
-        "Rec.709" | "sRGB" => ((0.64, 0.33), (0.30, 0.60), (0.15, 0.06), (0.3127, 0.3290)),
-        "Rec.2020" => ((0.708, 0.292), (0.170, 0.797), (0.131, 0.046), (0.3127, 0.3290)),
-        "DCI-P3" => ((0.680, 0.320), (0.265, 0.690), (0.150, 0.060), (0.314, 0.351)),
-        "Adobe RGB" => ((0.640, 0.330), (0.210, 0.710), (0.150, 0.060), (0.3127, 0.3290)),
+        "Rec.709" | "sRGB" => (
+            Chromaticity { x: 0.64, y: 0.33 },
+            Chromaticity { x: 0.30, y: 0.60 },
+            Chromaticity { x: 0.15, y: 0.06 },
+            Chromaticity { x: 0.3127, y: 0.3290 },
+        ),
+        "Rec.2020" => (
+            Chromaticity { x: 0.708, y: 0.292 },
+            Chromaticity { x: 0.170, y: 0.797 },
+            Chromaticity { x: 0.131, y: 0.046 },
+            Chromaticity { x: 0.3127, y: 0.3290 },
+        ),
+        // Note: DCI-P3 uses the DCI theater white point (0.314, 0.351), not D65.
+        // Display P3 (Apple / consumer) uses D65; request "Display P3" for that.
+        "DCI-P3" => (
+            Chromaticity { x: 0.680, y: 0.320 },
+            Chromaticity { x: 0.265, y: 0.690 },
+            Chromaticity { x: 0.150, y: 0.060 },
+            Chromaticity { x: 0.314, y: 0.351 },
+        ),
+        "Adobe RGB" => (
+            Chromaticity { x: 0.640, y: 0.330 },
+            Chromaticity { x: 0.210, y: 0.710 },
+            Chromaticity { x: 0.150, y: 0.060 },
+            Chromaticity { x: 0.3127, y: 0.3290 },
+        ),
         _ => return Err(format!("Invalid target_space: {}", target_space)),
     };
     Ok(crate::ipc::models::GamutDto {

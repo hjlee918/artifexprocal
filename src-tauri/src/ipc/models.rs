@@ -46,12 +46,18 @@ pub struct DeviceInfo {
     pub available: bool,
 }
 
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, Copy)]
+pub struct Chromaticity {
+    pub x: f64,
+    pub y: f64,
+}
+
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
 pub struct GamutDto {
-    pub red: (f64, f64),
-    pub green: (f64, f64),
-    pub blue: (f64, f64),
-    pub white: (f64, f64),
+    pub red: Chromaticity,
+    pub green: Chromaticity,
+    pub blue: Chromaticity,
+    pub white: Chromaticity,
 }
 
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
