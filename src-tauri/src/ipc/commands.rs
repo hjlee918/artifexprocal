@@ -144,23 +144,9 @@ pub fn start_calibration(
         .start_calibration_session(session_config)
         .map_err(|e| e.to_string())?;
 
-    // Spawn calibration in blocking thread (placeholder — full integration in Task 5)
-    let app_clone = app.clone();
-    let patch_count = config.patch_count;
-    let session_id_clone = session_id.clone();
-    std::thread::spawn(move || {
-        // Emit a dummy progress event after 1s for testing
-        std::thread::sleep(Duration::from_secs(1));
-        crate::ipc::events::emit_calibration_progress(
-            &app_clone,
-            session_id_clone,
-            0,
-            patch_count,
-            "0% Black".to_string(),
-            Some((0.02, 0.3125, 0.3290)),
-            true,
-        );
-    });
+    service
+        .run_calibration(app, session_id.clone())
+        .map_err(|e| e.to_string())?;
 
     Ok(session_id)
 }
@@ -174,7 +160,7 @@ pub fn abort_calibration(
     if service.get_active_session_id() != Some(session_id.clone()) {
         return Err(crate::service::error::CalibrationError::SessionNotFound(session_id).to_string());
     }
-    service.end_session();
+    service.request_abort();
     Ok(())
 }
 
