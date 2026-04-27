@@ -67,3 +67,42 @@ pub struct ErrorEvent {
     pub message: String,
     pub source: String,
 }
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct SessionConfigDto {
+    pub name: String,
+    pub target_space: String,
+    pub tone_curve: String,
+    pub white_point: String,
+    pub patch_count: usize,
+    pub reads_per_patch: usize,
+    pub settle_time_ms: u64,
+    pub stability_threshold: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct CalibrationProgress {
+    pub session_id: String,
+    pub current_patch: usize,
+    pub total_patches: usize,
+    pub patch_name: String,
+    pub yxy: Option<(f64, f64, f64)>,
+    pub stable: bool,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ProfilingConfig {
+    pub patch_set: String,
+    pub patch_scale: String,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ProfilingProgress {
+    pub session_id: String,
+    pub current_patch: usize,
+    pub total_patches: usize,
+    pub patch_name: String,
+    pub reference_xyz: (f64, f64, f64),
+    pub meter_xyz: (f64, f64, f64),
+    pub delta_e: f64,
+}

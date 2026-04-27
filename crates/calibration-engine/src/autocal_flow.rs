@@ -45,19 +45,14 @@ impl GreyscaleAutoCalFlow {
         self.current_patch = 0;
     }
 
-    pub fn run_sync<M, D, P>(
+    pub fn run_sync(
         &mut self,
-        meter: &mut M,
-        display: &mut D,
-        pattern_gen: &mut P,
+        meter: &mut dyn Meter,
+        display: &mut dyn DisplayController,
+        pattern_gen: &mut dyn PatternGenerator,
         storage: &Storage,
         events: &EventChannel,
-    ) -> Result<(), CalibrationError>
-    where
-        M: Meter,
-        D: DisplayController,
-        P: PatternGenerator,
-    {
+    ) -> Result<(), CalibrationError> {
         let session_store = SessionStore::new(&storage.conn);
         let reading_store = ReadingStore::new(&storage.conn);
 

@@ -12,6 +12,10 @@ mod tests {
                 crate::ipc::commands::connect_display,
                 crate::ipc::commands::disconnect_display,
                 crate::ipc::commands::get_device_inventory,
+                crate::ipc::commands::start_calibration,
+                crate::ipc::commands::abort_calibration,
+                crate::ipc::commands::start_profiling,
+                crate::ipc::commands::abort_profiling,
             ],
             "../../src/bindings.ts",
         )

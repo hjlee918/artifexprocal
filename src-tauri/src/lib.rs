@@ -33,6 +33,10 @@ pub fn run() {
             ipc::commands::connect_display,
             ipc::commands::disconnect_display,
             ipc::commands::get_device_inventory,
+            ipc::commands::start_calibration,
+            ipc::commands::abort_calibration,
+            ipc::commands::start_profiling,
+            ipc::commands::abort_profiling,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

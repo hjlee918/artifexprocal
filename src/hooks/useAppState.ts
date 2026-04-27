@@ -1,10 +1,5 @@
 import { useCallback, useEffect } from "react";
-import {
-  getAppState,
-  type AppState,
-  type MeterInfo,
-  type DisplayInfo,
-} from "../bindings";
+import { getAppState } from "../bindings";
 import { useDashboardStore } from "../store/useDashboardStore";
 
 export function useAppState() {

@@ -63,6 +63,41 @@ export type ErrorEvent = {
   source: string;
 };
 
+export type SessionConfigDto = {
+  name: string;
+  target_space: string;
+  tone_curve: string;
+  white_point: string;
+  patch_count: number;
+  reads_per_patch: number;
+  settle_time_ms: number;
+  stability_threshold: number | null;
+};
+
+export type CalibrationProgress = {
+  session_id: string;
+  current_patch: number;
+  total_patches: number;
+  patch_name: string;
+  yxy: [number, number, number] | null;
+  stable: boolean;
+};
+
+export type ProfilingConfig = {
+  patch_set: string;
+  patch_scale: string;
+};
+
+export type ProfilingProgress = {
+  session_id: string;
+  current_patch: number;
+  total_patches: number;
+  patch_name: string;
+  reference_xyz: [number, number, number];
+  meter_xyz: [number, number, number];
+  delta_e: number;
+};
+
 // ─── Commands ────────────────────────────────────────────────────────────────
 
 export function getAppState(): Promise<AppState> {
@@ -108,13 +143,46 @@ export function computeXyy(
   return invoke("compute_xyy", { x, y, z });
 }
 
+export function startCalibration(config: SessionConfigDto): Promise<string> {
+  return invoke("start_calibration", { config });
+}
+
+export function abortCalibration(sessionId: string): Promise<void> {
+  return invoke("abort_calibration", { sessionId });
+}
+
+export function startProfiling(
+  meterId: string,
+  referenceMeterId: string,
+  displayId: string,
+  config: ProfilingConfig
+): Promise<string> {
+  return invoke("start_profiling", { meterId, referenceMeterId, displayId, config });
+}
+
+export function abortProfiling(sessionId: string): Promise<void> {
+  return invoke("abort_profiling", { sessionId });
+}
+
 // ─── Event names ─────────────────────────────────────────────────────────────
 
 export const EVENT_DEVICE_STATUS_CHANGED = "device-status-changed" as const;
 export const EVENT_CALIBRATION_STATE_CHANGED = "calibration-state-changed" as const;
 export const EVENT_ERROR_OCCURRED = "error-occurred" as const;
+export const EVENT_CALIBRATION_PROGRESS = "calibration-progress" as const;
+export const EVENT_ANALYSIS_COMPLETE = "analysis-complete" as const;
+export const EVENT_LUT_UPLOADED = "lut-uploaded" as const;
+export const EVENT_VERIFICATION_COMPLETE = "verification-complete" as const;
+export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
+export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
 
 export type EventName =
   | typeof EVENT_DEVICE_STATUS_CHANGED
   | typeof EVENT_CALIBRATION_STATE_CHANGED
-  | typeof EVENT_ERROR_OCCURRED;
+  | typeof EVENT_ERROR_OCCURRED
+  | typeof EVENT_CALIBRATION_PROGRESS
+  | typeof EVENT_ANALYSIS_COMPLETE
+  | typeof EVENT_LUT_UPLOADED
+  | typeof EVENT_VERIFICATION_COMPLETE
+  | typeof EVENT_PROFILING_PROGRESS
+  | typeof EVENT_PROFILING_COMPLETE;

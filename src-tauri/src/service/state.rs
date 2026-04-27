@@ -1,16 +1,31 @@
 use crate::ipc::models::{CalibrationState, DisplayInfo, MeterInfo};
 use crate::service::error::CalibrationError;
-use hal::traits::{DisplayController, Meter};
+use calibration_core::state::SessionConfig;
+use calibration_storage::schema::Storage;
+use color_science::types::{RGB, XYZ};
+use hal::traits::{DisplayController, Meter, PatternGenerator};
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tauri::AppHandle;
+
+struct CalibrationSession {
+    session_id: String,
+    config: SessionConfig,
+    pre_readings: Vec<(RGB, XYZ)>,
+}
 
 pub struct CalibrationService {
     meter: Arc<Mutex<Option<Box<dyn Meter + Send>>>>,
     meter_info: Arc<Mutex<Option<MeterInfo>>>,
     display: Arc<Mutex<Option<Box<dyn DisplayController + Send>>>>,
     display_info: Arc<Mutex<Option<DisplayInfo>>>,
+    pattern_gen: Arc<Mutex<Option<Box<dyn PatternGenerator + Send>>>>,
     state: Arc<Mutex<CalibrationState>>,
     use_mocks: bool,
+    active_session: Arc<Mutex<Option<CalibrationSession>>>,
+    storage: Arc<Mutex<Storage>>,
+    abort_flag: Arc<AtomicBool>,
 }
 
 impl Default for CalibrationService {
@@ -25,13 +40,18 @@ impl CalibrationService {
     }
 
     pub fn with_mocks(use_mocks: bool) -> Self {
+        let storage = Storage::new_in_memory().expect("Failed to initialize SQLite storage");
         Self {
             meter: Arc::new(Mutex::new(None)),
             meter_info: Arc::new(Mutex::new(None)),
             display: Arc::new(Mutex::new(None)),
             display_info: Arc::new(Mutex::new(None)),
+            pattern_gen: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(CalibrationState::Idle)),
             use_mocks,
+            active_session: Arc::new(Mutex::new(None)),
+            storage: Arc::new(Mutex::new(storage)),
+            abort_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -41,6 +61,31 @@ impl CalibrationService {
 
     pub fn set_state(&self, state: CalibrationState) {
         *self.state.lock() = state;
+    }
+
+    pub fn start_calibration_session(
+        &self,
+        config: SessionConfig,
+    ) -> Result<String, CalibrationError> {
+        let mut guard = self.active_session.lock();
+        if guard.is_some() {
+            return Err(CalibrationError::SessionInProgress);
+        }
+        let session_id = format!("cal-{}", uuid::Uuid::new_v4());
+        *guard = Some(CalibrationSession {
+            session_id: session_id.clone(),
+            config,
+            pre_readings: Vec::new(),
+        });
+        Ok(session_id)
+    }
+
+    pub fn get_active_session_id(&self) -> Option<String> {
+        self.active_session.lock().as_ref().map(|s| s.session_id.clone())
+    }
+
+    pub fn end_session(&self) {
+        *self.active_session.lock() = None;
     }
 
     pub fn connect_meter(&self, meter_id: &str) -> Result<MeterInfo, CalibrationError> {
@@ -148,6 +193,20 @@ impl CalibrationService {
         Ok(info)
     }
 
+    pub fn connect_pattern_generator(&self) -> Result<(), CalibrationError> {
+        if self.use_mocks {
+            let mut fake = hal::mocks::FakePatternGenerator::default();
+            let _ = fake.connect();
+            *self.pattern_gen.lock() = Some(Box::new(fake));
+        } else {
+            // For now, always use FakePatternGenerator until real iTPG/PGenerator is wired
+            let mut fake = hal::mocks::FakePatternGenerator::default();
+            let _ = fake.connect();
+            *self.pattern_gen.lock() = Some(Box::new(fake));
+        }
+        Ok(())
+    }
+
     pub fn disconnect_display(&self, display_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.display_info.lock();
@@ -199,5 +258,129 @@ impl CalibrationService {
                 available: true,
             },
         ]
+    }
+
+    pub fn request_abort(&self) {
+        self.abort_flag.store(true, Ordering::SeqCst);
+    }
+
+    pub fn clear_abort(&self) {
+        self.abort_flag.store(false, Ordering::SeqCst);
+    }
+
+    pub fn is_aborted(&self) -> bool {
+        self.abort_flag.load(Ordering::SeqCst)
+    }
+
+    pub fn run_calibration(
+        &self,
+        app: AppHandle,
+        session_id: String,
+    ) -> Result<(), CalibrationError> {
+        let config = {
+            let guard = self.active_session.lock();
+            let session = guard.as_ref().ok_or(CalibrationError::SessionNotFound(session_id.clone()))?;
+            session.config.clone()
+        };
+
+        // Connect pattern generator if not already connected
+        {
+            let guard = self.pattern_gen.lock();
+            if guard.is_none() {
+                drop(guard);
+                self.connect_pattern_generator()?;
+            }
+        }
+
+        // Verify all hardware is connected
+        {
+            let meter_guard = self.meter.lock();
+            if meter_guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "meter".into() });
+            }
+        }
+        {
+            let display_guard = self.display.lock();
+            if display_guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "display".into() });
+            }
+        }
+        {
+            let pg_guard = self.pattern_gen.lock();
+            if pg_guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "pattern generator".into() });
+            }
+        }
+
+        self.clear_abort();
+        self.set_state(CalibrationState::Connecting);
+
+        let abort_flag = self.abort_flag.clone();
+        let app_clone = app.clone();
+        let meter_arc = self.meter.clone();
+        let display_arc = self.display.clone();
+        let pattern_gen_arc = self.pattern_gen.clone();
+        let state_arc = self.state.clone();
+        let active_session_arc = self.active_session.clone();
+
+        std::thread::spawn(move || {
+            let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
+
+            let storage = match Storage::new_in_memory() {
+                Ok(s) => s,
+                Err(e) => {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "error".into(), format!("Storage init failed: {}", e), "run_calibration".into()
+                    );
+                    return;
+                }
+            };
+
+            let events = calibration_engine::events::EventChannel::new(256);
+            let mut rx = events.subscribe();
+
+            // Spawn event bridge
+            let bridge_app = app_clone.clone();
+            let bridge_sid = session_id.clone();
+            std::thread::spawn(move || {
+                while let Ok(event) = rx.blocking_recv() {
+                    crate::ipc::events::emit_engine_event(&bridge_app, &bridge_sid, event);
+                }
+            });
+
+            // Lock hardware for the duration of the flow
+            let mut meter_guard = meter_arc.lock();
+            let mut display_guard = display_arc.lock();
+            let mut pg_guard = pattern_gen_arc.lock();
+
+            let meter = &mut **meter_guard.as_mut().unwrap();
+            let display = &mut **display_guard.as_mut().unwrap();
+            let pattern_gen = &mut **pg_guard.as_mut().unwrap();
+
+            let result = flow.run_sync(meter, display, pattern_gen, &storage, &events);
+
+            if let Err(e) = result {
+                if abort_flag.load(Ordering::SeqCst) {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "warning".into(), "Calibration aborted".into(), "run_calibration".into()
+                    );
+                } else {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "error".into(), e.to_string(), "run_calibration".into()
+                    );
+                }
+            }
+
+            // Disconnect hardware
+            if let Some(m) = meter_guard.as_mut() { m.disconnect(); }
+            if let Some(d) = display_guard.as_mut() { d.disconnect(); }
+            if let Some(p) = pg_guard.as_mut() { p.disconnect(); }
+
+            // Clear session
+            *active_session_arc.lock() = None;
+            *state_arc.lock() = CalibrationState::Idle;
+        });
+
+        Ok(())
     }
 }
