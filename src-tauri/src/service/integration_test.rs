@@ -20,6 +20,7 @@ mod tests {
             reads_per_patch: 3,
             settle_time_ms: 10,
             stability_threshold: None,
+            tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
         };
         let session_id = service.start_calibration_session(config).unwrap();
 

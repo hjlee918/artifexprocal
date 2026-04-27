@@ -1,5 +1,5 @@
 use calibration_engine::autocal_flow::*;
-use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint, CalibrationEvent};
+use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint, CalibrationEvent, CalibrationTier};
 use calibration_storage::schema::Storage;
 use calibration_storage::session_store::SessionStore;
 use calibration_storage::reading_store::ReadingStore;
@@ -118,6 +118,7 @@ fn test_autocal_flow_create_and_advance() {
         reads_per_patch: 3,
         settle_time_ms: 0,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);
@@ -142,6 +143,7 @@ fn test_autocal_flow_golden_path() {
         reads_per_patch: 3,
         settle_time_ms: 0,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config.clone());

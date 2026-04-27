@@ -1,5 +1,4 @@
 use calibration_core::state::*;
-use color_science::types::RGB;
 
 #[test]
 fn test_session_config_creation() {
@@ -12,6 +11,7 @@ fn test_session_config_creation() {
         reads_per_patch: 3,
         settle_time_ms: 500,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
     assert_eq!(config.patch_count, 21);
     assert_eq!(config.reads_per_patch, 3);

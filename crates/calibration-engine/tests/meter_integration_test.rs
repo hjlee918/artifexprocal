@@ -1,5 +1,5 @@
 use calibration_engine::autocal_flow::*;
-use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint};
+use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint, CalibrationTier};
 use calibration_storage::schema::Storage;
 use calibration_engine::events::EventChannel;
 use hal::traits::{Meter, DisplayController, PatternGenerator};
@@ -67,6 +67,7 @@ fn test_calibration_with_simulated_meter() {
         reads_per_patch: 1,
         settle_time_ms: 0,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);

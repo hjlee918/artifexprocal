@@ -28,6 +28,13 @@ pub enum WhitePoint {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum CalibrationTier {
+    GrayscaleOnly,
+    GrayscalePlus3D,
+    Full3D,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionConfig {
     pub name: String,
     pub target_space: TargetSpace,
@@ -37,6 +44,7 @@ pub struct SessionConfig {
     pub reads_per_patch: usize,
     pub settle_time_ms: u64,
     pub stability_threshold: Option<f64>,
+    pub tier: CalibrationTier,
 }
 
 #[derive(Debug, Clone, PartialEq)]

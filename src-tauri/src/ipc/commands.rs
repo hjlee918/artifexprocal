@@ -138,6 +138,7 @@ pub fn start_calibration(
         reads_per_patch: config.reads_per_patch,
         settle_time_ms: config.settle_time_ms,
         stability_threshold: config.stability_threshold,
+        tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
     };
 
     let session_id = service

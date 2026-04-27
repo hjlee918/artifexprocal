@@ -1,4 +1,4 @@
-use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint};
+use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint, CalibrationTier};
 use calibration_storage::schema::Storage;
 use calibration_storage::session_store::SessionStore;
 
@@ -16,6 +16,7 @@ fn test_create_and_get_session() {
         reads_per_patch: 3,
         settle_time_ms: 500,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let id = store.create(&config).unwrap();
@@ -38,6 +39,7 @@ fn test_update_session_state() {
         reads_per_patch: 3,
         settle_time_ms: 500,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let id = store.create(&config).unwrap();

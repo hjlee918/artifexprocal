@@ -1,5 +1,5 @@
-use calibration_core::patch::*;
-use color_science::types::RGB;
+use calibration_core::patch::{Patch, GreyscalePatchSet};
+use color_science::types::{RGB, XYZ};
 
 #[test]
 fn test_greyscale_patch_set_count() {
@@ -25,4 +25,22 @@ fn test_greyscale_patch_set_monotonic() {
         let curr = patches.get(i).target_rgb.r;
         assert!(curr > prev, "Greyscale patches should be monotonically increasing");
     }
+}
+
+#[test]
+fn patch_with_measurement() {
+    let patch = Patch::with_measurement(
+        RGB { r: 1.0, g: 0.5, b: 0.0 },
+        XYZ { x: 50.0, y: 30.0, z: 5.0 },
+    );
+    assert_eq!(patch.target_rgb, RGB { r: 1.0, g: 0.5, b: 0.0 });
+    assert_eq!(patch.measured_xyz, Some(XYZ { x: 50.0, y: 30.0, z: 5.0 }));
+}
+
+#[test]
+fn greyscale_patch_set_uses_new_constructor() {
+    let set = GreyscalePatchSet::new(5);
+    assert_eq!(set.len(), 5);
+    assert!(set.patches[0].measured_xyz.is_none());
+    assert_eq!(set.patches[4].target_rgb, RGB { r: 1.0, g: 1.0, b: 1.0 });
 }
