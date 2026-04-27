@@ -201,3 +201,31 @@ pub fn abort_profiling(
 ) -> Result<(), String> {
     Ok(())
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_spectral_locus(diagram: String) -> Result<Vec<(f64, f64)>, String> {
+    match diagram.as_str() {
+        "1931" => Ok(color_science::diagrams::SPECTRAL_LOCUS_1931.to_vec()),
+        "1976" => Ok(color_science::diagrams::spectral_locus_1976().to_vec()),
+        _ => Err(format!("Invalid diagram: {}", diagram)),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_target_gamut(target_space: String) -> Result<crate::ipc::models::GamutDto, String> {
+    let (r, g, b, w) = match target_space.as_str() {
+        "Rec.709" | "sRGB" => ((0.64, 0.33), (0.30, 0.60), (0.15, 0.06), (0.3127, 0.3290)),
+        "Rec.2020" => ((0.708, 0.292), (0.170, 0.797), (0.131, 0.046), (0.3127, 0.3290)),
+        "DCI-P3" => ((0.680, 0.320), (0.265, 0.690), (0.150, 0.060), (0.314, 0.351)),
+        "Adobe RGB" => ((0.640, 0.330), (0.210, 0.710), (0.150, 0.060), (0.3127, 0.3290)),
+        _ => return Err(format!("Invalid target_space: {}", target_space)),
+    };
+    Ok(crate::ipc::models::GamutDto {
+        red: r,
+        green: g,
+        blue: b,
+        white: w,
+    })
+}

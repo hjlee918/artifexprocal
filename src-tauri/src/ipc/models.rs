@@ -47,6 +47,14 @@ pub struct DeviceInfo {
 }
 
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct GamutDto {
+    pub red: (f64, f64),
+    pub green: (f64, f64),
+    pub blue: (f64, f64),
+    pub white: (f64, f64),
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
 pub struct DeviceStatusEvent {
     pub device_id: String,
     pub device_type: String,

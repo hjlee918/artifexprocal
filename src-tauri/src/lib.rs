@@ -37,6 +37,8 @@ pub fn run() {
             ipc::commands::abort_calibration,
             ipc::commands::start_profiling,
             ipc::commands::abort_profiling,
+            ipc::commands::get_spectral_locus,
+            ipc::commands::get_target_gamut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
