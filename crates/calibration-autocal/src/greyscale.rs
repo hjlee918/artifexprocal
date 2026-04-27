@@ -18,6 +18,7 @@ fn to_cs_white_point(wp: &WhitePoint) -> CsWhitePoint {
     match wp {
         WhitePoint::D65 => CsWhitePoint::D65,
         WhitePoint::D50 => CsWhitePoint::D50,
+        WhitePoint::Dci => CsWhitePoint::Custom { x: 0.3140, y: 0.3510 },
         WhitePoint::Custom(xyz) => CsWhitePoint::Custom {
             x: xyz.x / (xyz.x + xyz.y + xyz.z),
             y: xyz.y / (xyz.x + xyz.y + xyz.z),
