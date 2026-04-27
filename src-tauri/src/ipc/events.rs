@@ -2,6 +2,7 @@ use crate::ipc::models::{
     CalibrationProgress, CalibrationStateEvent, DeviceStatusEvent, ErrorEvent,
     ProfilingProgress,
 };
+use calibration_core::state::CalibrationEvent;
 use tauri::{AppHandle, Emitter};
 
 pub fn emit_device_status_changed(
@@ -171,5 +172,74 @@ pub fn emit_profiling_complete(
         }),
     ) {
         eprintln!("Failed to emit profiling-complete: {}", e);
+    }
+}
+
+pub fn emit_engine_event(
+    app: &AppHandle,
+    session_id: &str,
+    event: CalibrationEvent,
+) {
+    match event {
+        CalibrationEvent::DeviceConnected { device } => {
+            emit_device_status_changed(app, device.clone(), "device".into(), true, format!("{} connected", device));
+        }
+        CalibrationEvent::PatchDisplayed { patch_index, .. } => {
+            emit_calibration_progress(
+                app,
+                session_id.to_string(),
+                patch_index,
+                0,
+                format!("Patch {}", patch_index),
+                None,
+                false,
+            );
+        }
+        CalibrationEvent::ReadingsComplete { patch_index, xyz, .. } => {
+            let yxy = color_science::types::XYZ { x: xyz.x, y: xyz.y, z: xyz.z }.to_xyy();
+            emit_calibration_progress(
+                app,
+                session_id.to_string(),
+                patch_index,
+                0,
+                format!("Patch {}", patch_index),
+                Some((yxy.Y, yxy.x, yxy.y)),
+                true,
+            );
+        }
+        CalibrationEvent::ProgressUpdated { current, total } => {
+            emit_calibration_progress(
+                app,
+                session_id.to_string(),
+                current,
+                total,
+                format!("Patch {}", current),
+                None,
+                false,
+            );
+        }
+        CalibrationEvent::AnalysisComplete { gamma, max_de, white_balance_errors } => {
+            let avg_de = white_balance_errors.iter().sum::<f64>() / white_balance_errors.len().max(1) as f64;
+            emit_analysis_complete(
+                app,
+                session_id.to_string(),
+                gamma,
+                max_de,
+                avg_de,
+                white_balance_errors,
+            );
+        }
+        CalibrationEvent::LutGenerated { size } => {
+            emit_lut_uploaded(app, session_id.to_string());
+        }
+        CalibrationEvent::CorrectionsUploaded => {
+            emit_lut_uploaded(app, session_id.to_string());
+        }
+        CalibrationEvent::SessionComplete { .. } => {
+            emit_verification_complete(app, session_id.to_string(), vec![], vec![]);
+        }
+        CalibrationEvent::Error(e) => {
+            emit_error_occurred(app, "error".into(), e.to_string(), "engine".into());
+        }
     }
 }
