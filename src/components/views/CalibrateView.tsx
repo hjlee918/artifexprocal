@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { CalibrationWizard } from "../calibrate/CalibrationWizard";
 import { DeviceSelectionStep } from "../calibrate/DeviceSelectionStep";
 import { TargetConfigStep } from "../calibrate/TargetConfigStep";
@@ -6,8 +7,8 @@ import { MeasurementStep } from "../calibrate/MeasurementStep";
 import { AnalysisStep } from "../calibrate/AnalysisStep";
 import { UploadStep } from "../calibrate/UploadStep";
 import { VerifyStep } from "../calibrate/VerifyStep";
-import type { WizardState, PatchReading, AnalysisResult, VerificationResult } from "../calibrate/types";
-import { startCalibration } from "../../bindings";
+import type { WizardState, PatchReading, VerificationResult } from "../calibrate/types";
+import { startCalibration, EVENT_ANALYSIS_COMPLETE } from "../../bindings";
 
 export function CalibrateView() {
   const [state, setState] = useState<WizardState>({
@@ -38,15 +39,39 @@ export function CalibrateView() {
     }
   };
 
-  const handleMeasurementComplete = (readings: PatchReading[]) => {
-    // Mock analysis for now
-    const analysis: AnalysisResult = {
-      gamma: 2.35,
-      max_de: 2.8,
-      avg_de: 1.2,
-      white_balance_errors: [0.02, -0.01, 0.03],
+  useEffect(() => {
+    let cancelled = false;
+    const unsubPromise = listen<{
+      session_id: string;
+      gamma: number;
+      max_de: number;
+      avg_de: number;
+      white_balance_errors: number[];
+    }>(EVENT_ANALYSIS_COMPLETE, (event) => {
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        step: "analyze",
+        analysis: {
+          gamma: event.payload.gamma,
+          max_de: event.payload.max_de,
+          avg_de: event.payload.avg_de,
+          white_balance_errors: [
+            event.payload.white_balance_errors[0] ?? 0,
+            event.payload.white_balance_errors[1] ?? 0,
+            event.payload.white_balance_errors[2] ?? 0,
+          ] as [number, number, number],
+        },
+      }));
+    });
+    return () => {
+      cancelled = true;
+      unsubPromise.then((u) => u());
     };
-    setState((s) => ({ ...s, step: "analyze", readings, analysis }));
+  }, []);
+
+  const handleMeasurementComplete = (_readings: PatchReading[]) => {
+    // Analysis is now driven by backend analysis-complete event
   };
 
   const handleApplyCorrections = () => {
