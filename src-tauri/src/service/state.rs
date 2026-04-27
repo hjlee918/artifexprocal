@@ -1,9 +1,11 @@
 use crate::ipc::models::{CalibrationState, DisplayInfo, MeterInfo};
 use crate::service::error::CalibrationError;
 use calibration_core::state::SessionConfig;
+use calibration_storage::schema::Storage;
 use color_science::types::{RGB, XYZ};
-use hal::traits::{DisplayController, Meter};
+use hal::traits::{DisplayController, Meter, PatternGenerator};
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 struct CalibrationSession {
@@ -17,9 +19,12 @@ pub struct CalibrationService {
     meter_info: Arc<Mutex<Option<MeterInfo>>>,
     display: Arc<Mutex<Option<Box<dyn DisplayController + Send>>>>,
     display_info: Arc<Mutex<Option<DisplayInfo>>>,
+    pattern_gen: Arc<Mutex<Option<Box<dyn PatternGenerator + Send>>>>,
     state: Arc<Mutex<CalibrationState>>,
     use_mocks: bool,
     active_session: Arc<Mutex<Option<CalibrationSession>>>,
+    storage: Arc<Mutex<Storage>>,
+    abort_flag: Arc<AtomicBool>,
 }
 
 impl Default for CalibrationService {
@@ -34,14 +39,18 @@ impl CalibrationService {
     }
 
     pub fn with_mocks(use_mocks: bool) -> Self {
+        let storage = Storage::new_in_memory().expect("Failed to initialize SQLite storage");
         Self {
             meter: Arc::new(Mutex::new(None)),
             meter_info: Arc::new(Mutex::new(None)),
             display: Arc::new(Mutex::new(None)),
             display_info: Arc::new(Mutex::new(None)),
+            pattern_gen: Arc::new(Mutex::new(None)),
             state: Arc::new(Mutex::new(CalibrationState::Idle)),
             use_mocks,
             active_session: Arc::new(Mutex::new(None)),
+            storage: Arc::new(Mutex::new(storage)),
+            abort_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -183,6 +192,20 @@ impl CalibrationService {
         Ok(info)
     }
 
+    pub fn connect_pattern_generator(&self) -> Result<(), CalibrationError> {
+        if self.use_mocks {
+            let mut fake = hal::mocks::FakePatternGenerator::default();
+            let _ = fake.connect();
+            *self.pattern_gen.lock() = Some(Box::new(fake));
+        } else {
+            // For now, always use FakePatternGenerator until real iTPG/PGenerator is wired
+            let mut fake = hal::mocks::FakePatternGenerator::default();
+            let _ = fake.connect();
+            *self.pattern_gen.lock() = Some(Box::new(fake));
+        }
+        Ok(())
+    }
+
     pub fn disconnect_display(&self, display_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.display_info.lock();
@@ -234,5 +257,17 @@ impl CalibrationService {
                 available: true,
             },
         ]
+    }
+
+    pub fn request_abort(&self) {
+        self.abort_flag.store(true, Ordering::SeqCst);
+    }
+
+    pub fn clear_abort(&self) {
+        self.abort_flag.store(false, Ordering::SeqCst);
+    }
+
+    pub fn is_aborted(&self) -> bool {
+        self.abort_flag.load(Ordering::SeqCst)
     }
 }

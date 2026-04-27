@@ -147,12 +147,13 @@ pub fn start_calibration(
     // Spawn calibration in blocking thread (placeholder — full integration in Task 5)
     let app_clone = app.clone();
     let patch_count = config.patch_count;
+    let session_id_clone = session_id.clone();
     std::thread::spawn(move || {
         // Emit a dummy progress event after 1s for testing
         std::thread::sleep(Duration::from_secs(1));
         crate::ipc::events::emit_calibration_progress(
             &app_clone,
-            session_id.clone(),
+            session_id_clone,
             0,
             patch_count,
             "0% Black".to_string(),
@@ -170,7 +171,7 @@ pub fn abort_calibration(
     service: State<'_, CalibrationService>,
     session_id: String,
 ) -> Result<(), String> {
-    if service.get_active_session_id() != Some(session_id) {
+    if service.get_active_session_id() != Some(session_id.clone()) {
         return Err(crate::service::error::CalibrationError::SessionNotFound(session_id).to_string());
     }
     service.end_session();
@@ -189,11 +190,12 @@ pub fn start_profiling(
 ) -> Result<String, String> {
     let session_id = format!("prof-{}", uuid::Uuid::new_v4());
     let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(1));
         crate::ipc::events::emit_profiling_progress(
             &app_clone,
-            session_id.clone(),
+            session_id_clone,
             0,
             20,
             "Primary Red".to_string(),

@@ -14,4 +14,8 @@ pub enum CalibrationError {
     SessionInProgress,
     #[error("Session {0} not found.")]
     SessionNotFound(String),
+    #[error("No {device} connected.")]
+    NoHardwareConnected { device: String },
+    #[error("Calibration aborted by user.")]
+    CalibrationAborted,
 }
