@@ -32,12 +32,13 @@ export function MeasurementStep({
       setStable(p.stable);
 
       if (p.current_patch > 0 && p.stable) {
+        const level = p.current_patch / p.total_patches;
         const newReading: PatchReading = {
           patch_index: p.current_patch,
           patch_name: p.patch_name,
-          rgb: [0, 0, 0], // Will be filled from backend
+          rgb: [level, level, level],
           yxy: p.yxy ?? [0, 0, 0],
-          de2000: 0, // Computed later
+          de2000: 0, // Computed by backend in analysis step
         };
         setReadings((prev) => {
           const filtered = prev.filter((r) => r.patch_index !== p.current_patch);
