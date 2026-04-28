@@ -113,11 +113,77 @@ fn lut3d_engine_identity_display() {
     assert_eq!(lut.size, 5);
     assert_eq!(lut.data.len(), 125);
 
-    // White point should be approximately (1,1,1)
-    let white = lut.data[124]; // (1,1,1) at index (4,4,4) = (4*5+4)*5+4 = 124
-    assert!((white.r - 1.0).abs() < 0.2, "White r should be ~1.0, got {}", white.r);
-    assert!((white.g - 1.0).abs() < 0.2, "White g should be ~1.0, got {}", white.g);
-    assert!((white.b - 1.0).abs() < 0.2, "White b should be ~1.0, got {}", white.b);
+    // Black (0,0,0) at index 0 should be approximately (0,0,0)
+    let black = lut.data[0];
+    assert!(
+        (black.r - 0.0).abs() < 0.2,
+        "Black r should be ~0.0, got {}",
+        black.r
+    );
+    assert!(
+        (black.g - 0.0).abs() < 0.2,
+        "Black g should be ~0.0, got {}",
+        black.g
+    );
+    assert!(
+        (black.b - 0.0).abs() < 0.2,
+        "Black b should be ~0.0, got {}",
+        black.b
+    );
+
+    // White point (1,1,1) at index 124 should be approximately (1,1,1)
+    let white = lut.data[124]; // (4,4,4) = (4*5+4)*5+4 = 124
+    assert!(
+        (white.r - 1.0).abs() < 0.2,
+        "White r should be ~1.0, got {}",
+        white.r
+    );
+    assert!(
+        (white.g - 1.0).abs() < 0.2,
+        "White g should be ~1.0, got {}",
+        white.g
+    );
+    assert!(
+        (white.b - 1.0).abs() < 0.2,
+        "White b should be ~1.0, got {}",
+        white.b
+    );
+
+    // Mid-gray (0.5,0.5,0.5) at index (2*5+2)*5+2 = 62
+    let gray = lut.data[62];
+    assert!(
+        (gray.r - 0.5).abs() < 0.2,
+        "Gray r should be ~0.5, got {}",
+        gray.r
+    );
+    assert!(
+        (gray.g - 0.5).abs() < 0.2,
+        "Gray g should be ~0.5, got {}",
+        gray.g
+    );
+    assert!(
+        (gray.b - 0.5).abs() < 0.2,
+        "Gray b should be ~0.5, got {}",
+        gray.b
+    );
+
+    // Red primary (1,0,0) at index (4*5+0)*5+0 = 100
+    let red = lut.data[100];
+    assert!(
+        (red.r - 1.0).abs() < 0.2,
+        "Red r should be ~1.0, got {}",
+        red.r
+    );
+    assert!(
+        red.g.abs() < 0.2,
+        "Red g should be ~0.0, got {}",
+        red.g
+    );
+    assert!(
+        red.b.abs() < 0.2,
+        "Red b should be ~0.0, got {}",
+        red.b
+    );
 }
 
 #[test]

@@ -124,8 +124,8 @@ impl Lut3DEngine {
             return Err("No patches provided".to_string());
         }
 
-        // Build sparse mapping: target RGB -> measured XYZ
-        let sparse: Vec<(RGB, XYZ)> = patches.to_vec();
+        // Compute per-primary gain ratios from measured patches
+        let primary_gains = Self::compute_primary_gains(patches);
 
         // For each grid point, interpolate in XYZ space using nearest neighbors
         let mut data = Vec::with_capacity(size * size * size);
@@ -140,11 +140,11 @@ impl Lut3DEngine {
                     let target_rgb = RGB { r: rf, g: gf, b: bf };
 
                     // Find nearest measured neighbors and interpolate
-                    let measured_xyz = Self::interpolate_xyz(&sparse, rf, gf, bf);
+                    let measured_xyz = Self::interpolate_xyz(patches, rf, gf, bf);
 
                     // Compute correction: target RGB -> what RGB produces measured XYZ
-                    // For MVP: simple ratio correction (identity for perfect display)
-                    let corrected = Self::compute_correction(target_rgb, measured_xyz);
+                    // Uses per-primary gain ratios (diagonal approximation of display matrix)
+                    let corrected = Self::compute_correction(target_rgb, measured_xyz, &primary_gains);
 
                     data.push(corrected);
                 }
@@ -152,6 +152,36 @@ impl Lut3DEngine {
         }
 
         Ok(Lut3D { data, size })
+    }
+
+    fn compute_primary_gains(patches: &[(RGB, XYZ)]) -> [f64; 3] {
+        let mut red_gain = 0.0;
+        let mut red_count = 0;
+        let mut green_gain = 0.0;
+        let mut green_count = 0;
+        let mut blue_gain = 0.0;
+        let mut blue_count = 0;
+
+        for (rgb, xyz) in patches {
+            if rgb.r > 0.9 && rgb.g < 0.1 && rgb.b < 0.1 && xyz.x > 1e-10 {
+                red_gain += xyz.x / rgb.r;
+                red_count += 1;
+            }
+            if rgb.g > 0.9 && rgb.r < 0.1 && rgb.b < 0.1 && xyz.y > 1e-10 {
+                green_gain += xyz.y / rgb.g;
+                green_count += 1;
+            }
+            if rgb.b > 0.9 && rgb.r < 0.1 && rgb.g < 0.1 && xyz.z > 1e-10 {
+                blue_gain += xyz.z / rgb.b;
+                blue_count += 1;
+            }
+        }
+
+        [
+            if red_count > 0 { red_gain / red_count as f64 } else { 1.0 },
+            if green_count > 0 { green_gain / green_count as f64 } else { 1.0 },
+            if blue_count > 0 { blue_gain / blue_count as f64 } else { 1.0 },
+        ]
     }
 
     fn interpolate_xyz(sparse: &[(RGB, XYZ)], r: f64, g: f64, b: f64) -> XYZ {
@@ -189,26 +219,19 @@ impl Lut3DEngine {
         }
     }
 
-    fn compute_correction(target_rgb: RGB, measured_xyz: XYZ) -> RGB {
-        // MVP: compute simple correction assuming display response is approximately linear
-        // For a perfect display, measured XYZ should correspond to target RGB
-        // Correction = target / measured (normalized)
-        // This is a simplified approach; real implementation would invert the full
-        // display transform using XYZ->RGB matrix.
-        let sum = measured_xyz.x + measured_xyz.y + measured_xyz.z;
-        if sum < 1e-10 {
-            return target_rgb;
+    fn compute_correction(_target_rgb: RGB, measured_xyz: XYZ, gains: &[f64; 3]) -> RGB {
+        // Per-primary gain correction: invert a diagonal approximation of the
+        // display's RGB->XYZ matrix. For each channel, measured_XYZ_i / gain_i
+        // gives the input RGB that would produce this measurement.
+        // Future iterations should replace this with a full 3x3 matrix inversion.
+        if gains[0] < 1e-10 || gains[1] < 1e-10 || gains[2] < 1e-10 {
+            return RGB { r: 0.0, g: 0.0, b: 0.0 };
         }
 
-        // Normalized measured "RGB" (very rough approximation for correction magnitude)
-        let mr = measured_xyz.x / sum;
-        let mg = measured_xyz.y / sum;
-        let mb = measured_xyz.z / sum;
-
         RGB {
-            r: (target_rgb.r / mr.max(0.01)).clamp(0.0, 1.0),
-            g: (target_rgb.g / mg.max(0.01)).clamp(0.0, 1.0),
-            b: (target_rgb.b / mb.max(0.01)).clamp(0.0, 1.0),
+            r: (measured_xyz.x / gains[0]).clamp(0.0, 1.0),
+            g: (measured_xyz.y / gains[1]).clamp(0.0, 1.0),
+            b: (measured_xyz.z / gains[2]).clamp(0.0, 1.0),
         }
     }
 }
