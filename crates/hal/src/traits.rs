@@ -12,6 +12,7 @@ pub trait Meter: Send + Sync {
 pub trait DisplayController: Send + Sync {
     fn connect(&mut self) -> Result<(), DisplayError>;
     fn disconnect(&mut self);
+    fn model(&self) -> &str;
     fn set_picture_mode(&mut self, mode: &str) -> Result<(), DisplayError>;
     fn upload_1d_lut(&mut self, lut: &Lut1D) -> Result<(), DisplayError>;
     fn upload_3d_lut(&mut self, lut: &Lut3D) -> Result<(), DisplayError>;

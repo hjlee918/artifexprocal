@@ -66,6 +66,7 @@ impl DisplayController for MockDisplay {
     fn disconnect(&mut self) {
         self.connected = false;
     }
+    fn model(&self) -> &str { "MockDisplay" }
     fn set_picture_mode(&mut self, _mode: &str) -> Result<(), DisplayError> {
         Ok(())
     }

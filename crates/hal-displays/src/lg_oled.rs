@@ -23,6 +23,7 @@ pub struct LgOledController {
     calibration: CalibrationMode,
     pairing: PairingState,
     dc_client: Option<LgDeviceControlClient>,
+    model_info: String,
 }
 
 impl LgOledController {
@@ -35,6 +36,7 @@ impl LgOledController {
             calibration: CalibrationMode::new(),
             pairing: PairingState::new(),
             dc_client: None,
+            model_info: String::new(),
         }
     }
 
@@ -47,6 +49,7 @@ impl LgOledController {
             calibration: CalibrationMode::new(),
             pairing: PairingState::new(),
             dc_client: Some(LgDeviceControlClient::new("localhost", port)),
+            model_info: String::new(),
         }
     }
 
@@ -105,6 +108,10 @@ impl DisplayController for LgOledController {
             }
         }
         self.connected = false;
+    }
+
+    fn model(&self) -> &str {
+        &self.model_info
     }
 
     fn set_picture_mode(&mut self, mode: &str) -> Result<(), DisplayError> {

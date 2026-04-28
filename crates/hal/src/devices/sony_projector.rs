@@ -33,6 +33,10 @@ impl DisplayController for SonyProjectorController {
         self.connected = false;
     }
 
+    fn model(&self) -> &str {
+        "Sony VPL-VW385ES"
+    }
+
     fn set_picture_mode(&mut self, _mode: &str) -> Result<(), DisplayError> {
         if !self.connected {
             return Err(DisplayError::ConnectionFailed("Not connected".to_string()));

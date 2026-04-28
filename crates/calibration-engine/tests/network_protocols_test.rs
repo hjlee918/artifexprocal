@@ -21,6 +21,7 @@ struct MockDisplay;
 impl DisplayController for MockDisplay {
     fn connect(&mut self) -> Result<(), DisplayError> { Ok(()) }
     fn disconnect(&mut self) {}
+    fn model(&self) -> &str { "MockDisplay" }
     fn set_picture_mode(&mut self, _m: &str) -> Result<(), DisplayError> { Ok(()) }
     fn upload_1d_lut(&mut self, _l: &Lut1D) -> Result<(), DisplayError> { Ok(()) }
     fn upload_3d_lut(&mut self, _l: &Lut3D) -> Result<(), DisplayError> { Ok(()) }
