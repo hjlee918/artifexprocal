@@ -234,4 +234,59 @@ impl Lut3DEngine {
             b: (measured_xyz.z / gains[2]).clamp(0.0, 1.0),
         }
     }
+
+    /// Downsample a 33³ LUT to 17³ by averaging 2x2x2 voxel blocks.
+    pub fn downsample_33_to_17(lut: &Lut3D) -> Result<Lut3D, String> {
+        if lut.size != 33 {
+            return Err(format!("Expected 33³ LUT, got {}³", lut.size));
+        }
+
+        let new_size = 17;
+        let mut data = Vec::with_capacity(new_size * new_size * new_size);
+
+        for r in 0..new_size {
+            for g in 0..new_size {
+                for b in 0..new_size {
+                    // Map 17³ coordinate to center of 2x2x2 block in 33³
+                    let r_src = r * 2;
+                    let g_src = g * 2;
+                    let b_src = b * 2;
+
+                    let mut sum_r = 0.0;
+                    let mut sum_g = 0.0;
+                    let mut sum_b = 0.0;
+                    let mut count = 0.0;
+
+                    for dr in 0..2 {
+                        for dg in 0..2 {
+                            for db in 0..2 {
+                                let rr = (r_src + dr).min(32);
+                                let gg = (g_src + dg).min(32);
+                                let bb = (b_src + db).min(32);
+                                let idx = (rr * 33 + gg) * 33 + bb;
+                                if let Some(rgb) = lut.data.get(idx) {
+                                    sum_r += rgb.r;
+                                    sum_g += rgb.g;
+                                    sum_b += rgb.b;
+                                    count += 1.0;
+                                }
+                            }
+                        }
+                    }
+
+                    if count > 0.0 {
+                        data.push(RGB {
+                            r: sum_r / count,
+                            g: sum_g / count,
+                            b: sum_b / count,
+                        });
+                    } else {
+                        data.push(RGB { r: 0.0, g: 0.0, b: 0.0 });
+                    }
+                }
+            }
+        }
+
+        Ok(Lut3D { data, size: new_size })
+    }
 }

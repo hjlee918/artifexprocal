@@ -198,3 +198,29 @@ fn lut3d_engine_size_too_small_fails() {
     let result = Lut3DEngine::compute(&patches, 1, &TargetSpace::Bt709);
     assert!(result.is_err());
 }
+
+fn make_uniform_lut(size: usize, value: f64) -> Lut3D {
+    let data = vec![RGB { r: value, g: value, b: value }; size * size * size];
+    Lut3D { data, size }
+}
+
+#[test]
+fn downsample_uniform_lut() {
+    let lut33 = make_uniform_lut(33, 0.5);
+    let lut17 = Lut3DEngine::downsample_33_to_17(&lut33).unwrap();
+    assert_eq!(lut17.size, 17);
+    assert_eq!(lut17.data.len(), 4913); // 17³
+
+    for rgb in &lut17.data {
+        assert!((rgb.r - 0.5).abs() < 0.001);
+        assert!((rgb.g - 0.5).abs() < 0.001);
+        assert!((rgb.b - 0.5).abs() < 0.001);
+    }
+}
+
+#[test]
+fn downsample_wrong_size_fails() {
+    let lut5 = make_uniform_lut(5, 0.5);
+    let result = Lut3DEngine::downsample_33_to_17(&lut5);
+    assert!(result.is_err());
+}
