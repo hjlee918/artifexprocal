@@ -119,6 +119,7 @@ export function CalibrateView() {
             targetSpace={state.config?.target_space}
             onApply={handleApplyCorrections}
             onRemeasure={() => setState((s) => ({ ...s, step: "target" }))}
+            tier={state.config?.tier}
           />
         )}
         {state.step === "upload" && (

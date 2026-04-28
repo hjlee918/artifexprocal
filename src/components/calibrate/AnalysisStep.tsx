@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { CIEDiagram } from "../visualizations/CIEDiagram";
 import { GrayscaleTracker, type GrayscalePoint } from "../visualizations/GrayscaleTracker";
 import { PatchDataTable } from "./PatchDataTable";
+import { Lut3DTab } from "./Lut3DTab";
 import { getTargetGamut } from "../../lib/colorMath";
 import type { PatchReading, AnalysisResult } from "./types";
 
@@ -10,13 +12,16 @@ export function AnalysisStep({
   targetSpace,
   onApply,
   onRemeasure,
+  tier,
 }: {
   readings: PatchReading[];
   analysis: AnalysisResult;
   targetSpace?: string;
   onApply: () => void;
   onRemeasure: () => void;
+  tier?: string;
 }) {
+  const [activeTab, setActiveTab] = useState<"summary" | "3d-lut">("summary");
   const gammaPoints: GrayscalePoint[] = readings.map((r) => ({
     level: (r.patch_index / readings.length) * 100,
     r: r.rgb[0],
@@ -54,39 +59,63 @@ export function AnalysisStep({
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <SummaryCard label="Estimated Gamma" value={analysis.gamma.toFixed(2)} />
-        <SummaryCard
-          label="Max dE2000"
-          value={analysis.max_de.toFixed(2)}
-          color={analysis.max_de < 1 ? "green" : analysis.max_de < 3 ? "yellow" : "red"}
-        />
-        <SummaryCard
-          label="Avg dE2000"
-          value={analysis.avg_de.toFixed(2)}
-          color={analysis.avg_de < 1 ? "green" : analysis.avg_de < 3 ? "yellow" : "red"}
-        />
-        <SummaryCard
-          label="White Balance"
-          value={`R${analysis.white_balance_errors[0].toFixed(2)} G${analysis.white_balance_errors[1].toFixed(2)} B${analysis.white_balance_errors[2].toFixed(2)}`}
-        />
+      {/* Tab switcher */}
+      <div className="flex space-x-2 border-b border-gray-700">
+        <button
+          onClick={() => setActiveTab("summary")}
+          className={`px-4 py-2 text-sm ${activeTab === "summary" ? "text-primary border-b-2 border-primary" : "text-gray-400"}`}
+        >
+          Summary
+        </button>
+        <button
+          onClick={() => setActiveTab("3d-lut")}
+          className={`px-4 py-2 text-sm ${activeTab === "3d-lut" ? "text-primary border-b-2 border-primary" : "text-gray-400"}`}
+        >
+          3D LUT
+        </button>
       </div>
 
-      {/* Grayscale Tracker */}
-      <div className="bg-gray-800 border border-gray-800 rounded-lg p-3">
-        <div className="text-xs text-gray-500 uppercase mb-2">Grayscale Tracker</div>
-        <GrayscaleTracker targetGamma={2.4} points={gammaPoints} />
-      </div>
+      {activeTab === "summary" && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-4 gap-4">
+            <SummaryCard label="Estimated Gamma" value={analysis.gamma.toFixed(2)} />
+            <SummaryCard
+              label="Max dE2000"
+              value={analysis.max_de.toFixed(2)}
+              color={analysis.max_de < 1 ? "green" : analysis.max_de < 3 ? "yellow" : "red"}
+            />
+            <SummaryCard
+              label="Avg dE2000"
+              value={analysis.avg_de.toFixed(2)}
+              color={analysis.avg_de < 1 ? "green" : analysis.avg_de < 3 ? "yellow" : "red"}
+            />
+            <SummaryCard
+              label="White Balance"
+              value={`R${analysis.white_balance_errors[0].toFixed(2)} G${analysis.white_balance_errors[1].toFixed(2)} B${analysis.white_balance_errors[2].toFixed(2)}`}
+            />
+          </div>
 
-      {/* CIE Diagram */}
-      <div className="bg-gray-800 border border-gray-800 rounded-lg p-3">
-        <div className="text-xs text-gray-500 uppercase mb-2">CIE 1931 xy Chromaticity</div>
-        <CIEDiagram locus={locus} targetGamut={targetGamut} measuredGamut={measuredGamut} />
-      </div>
+          {/* Grayscale Tracker */}
+          <div className="bg-gray-800 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs text-gray-500 uppercase mb-2">Grayscale Tracker</div>
+            <GrayscaleTracker targetGamma={2.4} points={gammaPoints} />
+          </div>
 
-      {/* Table */}
-      <PatchDataTable readings={readings} />
+          {/* CIE Diagram */}
+          <div className="bg-gray-800 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs text-gray-500 uppercase mb-2">CIE 1931 xy Chromaticity</div>
+            <CIEDiagram locus={locus} targetGamut={targetGamut} measuredGamut={measuredGamut} />
+          </div>
+
+          {/* Table */}
+          <PatchDataTable readings={readings} />
+        </>
+      )}
+
+      {activeTab === "3d-lut" && (
+        <Lut3DTab has3DLut={tier !== "GrayscaleOnly"} lutSize={33} />
+      )}
 
       {/* Actions */}
       <div className="flex justify-between">
