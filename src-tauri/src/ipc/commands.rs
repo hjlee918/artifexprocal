@@ -1,6 +1,6 @@
 use crate::ipc::events;
 use crate::ipc::models::{
-    AppState, CalibrationState, DeviceInfo, DisplayInfo, MeterInfo,
+    AppState, CalibrationState, DeviceInfo, DisplayInfo, MeterInfo, Lut3DInfoDto,
 };
 use crate::service::CalibrationService;
 use std::time::Duration;
@@ -138,7 +138,11 @@ pub fn start_calibration(
         reads_per_patch: config.reads_per_patch,
         settle_time_ms: config.settle_time_ms,
         stability_threshold: config.stability_threshold,
-        tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
+        tier: match config.tier.as_str() {
+            "GrayscalePlus3D" => calibration_core::state::CalibrationTier::GrayscalePlus3D,
+            "Full3D" => calibration_core::state::CalibrationTier::Full3D,
+            _ => calibration_core::state::CalibrationTier::GrayscaleOnly,
+        },
     };
 
     let session_id = service
@@ -253,4 +257,30 @@ pub fn get_target_gamut(target_space: String) -> Result<crate::ipc::models::Gamu
         blue: b,
         white: w,
     })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn generate_3d_lut(
+    _service: State<'_, CalibrationService>,
+    _session_id: String,
+) -> Result<Lut3DInfoDto, String> {
+    // Placeholder: in full implementation, retrieve session readings and compute LUT
+    Ok(Lut3DInfoDto {
+        size: 33,
+        format: "cube".to_string(),
+        file_path: None,
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn export_lut(
+    _service: State<'_, CalibrationService>,
+    _session_id: String,
+    _format: String,
+    _path: String,
+) -> Result<(), String> {
+    // Placeholder: export LUT to the specified path
+    Ok(())
 }

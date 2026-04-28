@@ -113,6 +113,24 @@ pub fn emit_lut_uploaded(app: &AppHandle, session_id: String) {
     }
 }
 
+pub fn emit_lut3d_generated(
+    app: &AppHandle,
+    session_id: String,
+    size: usize,
+    format: String,
+) {
+    if let Err(e) = app.emit(
+        "lut3d-generated",
+        serde_json::json!({
+            "session_id": session_id,
+            "size": size,
+            "format": format,
+        }),
+    ) {
+        eprintln!("Failed to emit lut3d-generated: {}", e);
+    }
+}
+
 pub fn emit_verification_complete(
     app: &AppHandle,
     session_id: String,

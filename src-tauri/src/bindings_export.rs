@@ -19,6 +19,8 @@ export const {
 	abortProfiling,
 	getSpectralLocus,
 	getTargetGamut,
+	generate3dLut,
+	exportLut,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────
@@ -31,6 +33,7 @@ export const EVENT_ANALYSIS_COMPLETE = "analysis-complete" as const;
 export const EVENT_LUT_UPLOADED = "lut-uploaded" as const;
 export const EVENT_VERIFICATION_COMPLETE = "verification-complete" as const;
 export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
+export const EVENT_LUT3D_GENERATED = "lut3d-generated" as const;
 export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
 
 export type EventName =
@@ -42,7 +45,8 @@ export type EventName =
 	| typeof EVENT_LUT_UPLOADED
 	| typeof EVENT_VERIFICATION_COMPLETE
 	| typeof EVENT_PROFILING_PROGRESS
-	| typeof EVENT_PROFILING_COMPLETE;
+	| typeof EVENT_PROFILING_COMPLETE
+	| typeof EVENT_LUT3D_GENERATED;
 "#;
 
     #[test]
@@ -64,6 +68,8 @@ export type EventName =
                 crate::ipc::commands::abort_profiling,
                 crate::ipc::commands::get_spectral_locus,
                 crate::ipc::commands::get_target_gamut,
+                crate::ipc::commands::generate_3d_lut,
+                crate::ipc::commands::export_lut,
             ]);
 
         let path = "../src/bindings.ts";

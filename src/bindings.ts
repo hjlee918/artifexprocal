@@ -18,6 +18,8 @@ export const commands = {
 	abortProfiling: (sessionId: string) => __TAURI_INVOKE<null>("abort_profiling", { sessionId }),
 	getSpectralLocus: (diagram: string) => __TAURI_INVOKE<([number, number])[]>("get_spectral_locus", { diagram }),
 	getTargetGamut: (targetSpace: string) => __TAURI_INVOKE<GamutDto>("get_target_gamut", { targetSpace }),
+	generate3dLut: (sessionId: string) => __TAURI_INVOKE<Lut3DInfoDto>("generate_3d_lut", { sessionId }),
+	exportLut: (sessionId: string, format: string, path: string) => __TAURI_INVOKE<null>("export_lut", { sessionId, format, path }),
 };
 
 /* Types */
@@ -57,6 +59,12 @@ export type GamutDto = {
 	white: Chromaticity,
 };
 
+export type Lut3DInfoDto = {
+	size: number,
+	format: string,
+	file_path: string | null,
+};
+
 export type MeterInfo = {
 	id: string,
 	name: string,
@@ -79,6 +87,7 @@ export type SessionConfigDto = {
 	reads_per_patch: number,
 	settle_time_ms: number,
 	stability_threshold: number | null,
+	tier: string,
 };
 
 
@@ -100,6 +109,8 @@ export const {
 	abortProfiling,
 	getSpectralLocus,
 	getTargetGamut,
+	generate3dLut,
+	exportLut,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────
@@ -112,6 +123,7 @@ export const EVENT_ANALYSIS_COMPLETE = "analysis-complete" as const;
 export const EVENT_LUT_UPLOADED = "lut-uploaded" as const;
 export const EVENT_VERIFICATION_COMPLETE = "verification-complete" as const;
 export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
+export const EVENT_LUT3D_GENERATED = "lut3d-generated" as const;
 export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
 
 export type EventName =
@@ -123,4 +135,5 @@ export type EventName =
 	| typeof EVENT_LUT_UPLOADED
 	| typeof EVENT_VERIFICATION_COMPLETE
 	| typeof EVENT_PROFILING_PROGRESS
-	| typeof EVENT_PROFILING_COMPLETE;
+	| typeof EVENT_PROFILING_COMPLETE
+	| typeof EVENT_LUT3D_GENERATED;

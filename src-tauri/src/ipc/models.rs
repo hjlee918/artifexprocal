@@ -92,6 +92,14 @@ pub struct SessionConfigDto {
     pub reads_per_patch: usize,
     pub settle_time_ms: u64,
     pub stability_threshold: Option<f64>,
+    pub tier: String,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct Lut3DInfoDto {
+    pub size: usize,
+    pub format: String,
+    pub file_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
