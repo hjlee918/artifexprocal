@@ -10,6 +10,7 @@ impl TetrahedralInterpolator {
         Self { lut }
     }
 
+    /// Look up the corrected RGB value for a normalized input (r, g, b) in [0, 1].
     pub fn lookup(&self, r: f64, g: f64, b: f64) -> RGB {
         let size = self.lut.size;
         if size < 2 {
@@ -97,6 +98,7 @@ impl TetrahedralInterpolator {
         result
     }
 
+    /// Read a single LUT entry by grid coordinate, returning black if out of bounds.
     fn at(&self, r: usize, g: usize, b: usize) -> RGB {
         let idx = (r * self.lut.size + g) * self.lut.size + b;
         self.lut.data.get(idx).copied().unwrap_or(RGB { r: 0.0, g: 0.0, b: 0.0 })

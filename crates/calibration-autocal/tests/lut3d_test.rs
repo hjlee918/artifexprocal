@@ -43,6 +43,18 @@ fn tetrahedral_identity_center() {
 }
 
 #[test]
+fn tetrahedral_off_grid_interpolation() {
+    let lut = identity_lut(5);
+    let interp = TetrahedralInterpolator::new(lut);
+
+    // Off-grid point where dr, dg, db are all non-zero and distinct
+    let c = interp.lookup(0.1, 0.2, 0.3);
+    assert!((c.r - 0.1).abs() < 0.001, "Expected r ~ 0.1, got {}", c.r);
+    assert!((c.g - 0.2).abs() < 0.001, "Expected g ~ 0.2, got {}", c.g);
+    assert!((c.b - 0.3).abs() < 0.001, "Expected b ~ 0.3, got {}", c.b);
+}
+
+#[test]
 fn tetrahedral_scaled_lut() {
     let size = 3;
     let mut data = Vec::with_capacity(size * size * size);
