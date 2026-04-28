@@ -4,9 +4,10 @@ import { LutCubeScene } from "../visualizations/LutCubeScene";
 export interface Lut3DTabProps {
   lutSize?: number;
   has3DLut: boolean;
+  lutData?: number[]; // flattened RGB lattice data, 0-1 range
 }
 
-export function Lut3DTab({ lutSize, has3DLut }: Lut3DTabProps) {
+export function Lut3DTab({ lutSize, has3DLut, lutData }: Lut3DTabProps) {
   if (!has3DLut) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -29,7 +30,7 @@ export function Lut3DTab({ lutSize, has3DLut }: Lut3DTabProps) {
         <div className="text-xs text-gray-500 uppercase mb-2">3D LUT Cube</div>
         <div className="h-64">
           <ThreeCanvas>
-            <LutCubeScene />
+            <LutCubeScene lutSize={lutSize} lutData={lutData} />
           </ThreeCanvas>
         </div>
       </div>
