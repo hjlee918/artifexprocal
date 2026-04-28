@@ -92,3 +92,43 @@ fn tetrahedral_scaled_lut() {
         c.b
     );
 }
+
+use calibration_autocal::lut3d::Lut3DEngine;
+use calibration_core::state::TargetSpace;
+use color_science::types::XYZ;
+
+#[test]
+fn lut3d_engine_identity_display() {
+    // For a "perfect" display, target RGB = measured XYZ (in normalized form)
+    let patches: Vec<(RGB, XYZ)> = vec![
+        (RGB { r: 0.0, g: 0.0, b: 0.0 }, XYZ { x: 0.0, y: 0.0, z: 0.0 }),
+        (RGB { r: 1.0, g: 0.0, b: 0.0 }, XYZ { x: 100.0, y: 0.0, z: 0.0 }),
+        (RGB { r: 0.0, g: 1.0, b: 0.0 }, XYZ { x: 0.0, y: 100.0, z: 0.0 }),
+        (RGB { r: 0.0, g: 0.0, b: 1.0 }, XYZ { x: 0.0, y: 0.0, z: 100.0 }),
+        (RGB { r: 1.0, g: 1.0, b: 1.0 }, XYZ { x: 100.0, y: 100.0, z: 100.0 }),
+        (RGB { r: 0.5, g: 0.5, b: 0.5 }, XYZ { x: 50.0, y: 50.0, z: 50.0 }),
+    ];
+
+    let lut = Lut3DEngine::compute(&patches, 5, &TargetSpace::Bt709).unwrap();
+    assert_eq!(lut.size, 5);
+    assert_eq!(lut.data.len(), 125);
+
+    // White point should be approximately (1,1,1)
+    let white = lut.data[124]; // (1,1,1) at index (4,4,4) = (4*5+4)*5+4 = 124
+    assert!((white.r - 1.0).abs() < 0.2, "White r should be ~1.0, got {}", white.r);
+    assert!((white.g - 1.0).abs() < 0.2, "White g should be ~1.0, got {}", white.g);
+    assert!((white.b - 1.0).abs() < 0.2, "White b should be ~1.0, got {}", white.b);
+}
+
+#[test]
+fn lut3d_engine_empty_patches_fails() {
+    let result = Lut3DEngine::compute(&[], 5, &TargetSpace::Bt709);
+    assert!(result.is_err());
+}
+
+#[test]
+fn lut3d_engine_size_too_small_fails() {
+    let patches = vec![(RGB { r: 0.5, g: 0.5, b: 0.5 }, XYZ { x: 50.0, y: 50.0, z: 50.0 })];
+    let result = Lut3DEngine::compute(&patches, 1, &TargetSpace::Bt709);
+    assert!(result.is_err());
+}
