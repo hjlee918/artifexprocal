@@ -12,6 +12,11 @@ const SETTLE_TIMES = [
   { label: "2s", value: 2000 },
   { label: "5s", value: 5000 },
 ];
+const TIERS = [
+  { label: "Grayscale Only", value: "GrayscaleOnly" },
+  { label: "Grayscale + 3D LUT", value: "GrayscalePlus3D" },
+  { label: "Full 3D LUT", value: "Full3D" },
+];
 
 export function TargetConfigStep({
   onStart,
@@ -27,6 +32,7 @@ export function TargetConfigStep({
     reads_per_patch: 5,
     settle_time_ms: 1000,
     stability_threshold: null,
+    tier: "GrayscaleOnly",
   });
 
   return (
@@ -68,6 +74,13 @@ export function TargetConfigStep({
           options={SETTLE_TIMES.map((s) => String(s.value))}
           optionLabels={SETTLE_TIMES.map((s) => s.label)}
           onChange={(v) => setConfig((c) => ({ ...c, settle_time_ms: Number(v) }))}
+        />
+        <SelectField
+          label="Calibration Tier"
+          value={config.tier}
+          options={TIERS.map((t) => t.value)}
+          optionLabels={TIERS.map((t) => t.label)}
+          onChange={(v) => setConfig((c) => ({ ...c, tier: v }))}
         />
       </div>
 
