@@ -128,3 +128,60 @@ pub struct ProfilingProgress {
     pub meter_xyz: (f64, f64, f64),
     pub delta_e: f64,
 }
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct SessionSummaryDto {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub ended_at: Option<i64>,
+    pub state: String,
+    pub target_space: String,
+    pub tier: String,
+    pub patch_count: usize,
+    pub gamma: Option<f64>,
+    pub max_de: Option<f64>,
+    pub avg_de: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ComputedResultsDto {
+    pub gamma: Option<f64>,
+    pub max_de: Option<f64>,
+    pub avg_de: Option<f64>,
+    pub white_balance: Option<String>,
+    pub lut_1d_size: Option<usize>,
+    pub lut_3d_size: Option<usize>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct PatchReadingDto {
+    pub patch_index: usize,
+    pub target_rgb: (f64, f64, f64),
+    pub measured_xyz: (f64, f64, f64),
+    pub reading_index: usize,
+    pub measurement_type: String,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct SessionDetailDto {
+    pub summary: SessionSummaryDto,
+    pub config: SessionConfigDto,
+    pub readings: Vec<PatchReadingDto>,
+    pub results: Option<ComputedResultsDto>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, Default)]
+pub struct SessionFilterDto {
+    pub target_space: Option<String>,
+    pub state: Option<String>,
+    pub date_from: Option<i64>,
+    pub date_to: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct SessionListResponse {
+    pub items: Vec<SessionSummaryDto>,
+    pub total: usize,
+}
