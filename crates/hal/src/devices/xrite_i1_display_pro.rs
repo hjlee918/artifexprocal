@@ -3,14 +3,14 @@ use crate::traits::Meter;
 use color_science::types::XYZ;
 
 pub struct I1DisplayPro {
-    path: String,
+    _path: String,
     connected: bool,
 }
 
 impl I1DisplayPro {
     pub fn new(path: &str) -> Self {
         Self {
-            path: path.to_string(),
+            _path: path.to_string(),
             connected: false,
         }
     }

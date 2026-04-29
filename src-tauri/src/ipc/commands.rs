@@ -1,6 +1,6 @@
 use crate::ipc::events;
 use crate::ipc::models::{
-    AppState, CalibrationState, DeviceInfo, DisplayInfo, MeterInfo, Lut3DInfoDto,
+    AppState, DeviceInfo, DisplayInfo, MeterInfo, Lut3DInfoDto,
     SessionConfigDto, SessionDetailDto, SessionFilterDto, SessionListResponse,
     SessionSummaryDto, ComputedResultsDto, PatchReadingDto,
 };
@@ -175,8 +175,8 @@ pub fn abort_calibration(
 #[specta::specta]
 pub fn start_profiling(
     app: AppHandle,
-    service: State<'_, CalibrationService>,
-    meter_id: String,
+    _service: State<'_, CalibrationService>,
+    _meter_id: String,
     _reference_meter_id: String,
     _display_id: String,
     _config: crate::ipc::models::ProfilingConfig,

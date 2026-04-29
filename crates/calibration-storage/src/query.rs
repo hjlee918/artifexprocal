@@ -4,24 +4,13 @@ use rusqlite::{Connection, Result};
 use serde_json;
 use std::collections::HashMap;
 
+#[derive(Default)]
 pub struct SessionFilter {
     pub target_space: Option<String>,
     pub state: Option<String>,
     pub date_from: Option<i64>,
     pub date_to: Option<i64>,
     pub search: Option<String>,
-}
-
-impl Default for SessionFilter {
-    fn default() -> Self {
-        Self {
-            target_space: None,
-            state: None,
-            date_from: None,
-            date_to: None,
-            search: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

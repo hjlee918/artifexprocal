@@ -63,7 +63,7 @@ impl LgOledController {
 
     pub fn discover(timeout_ms: u64) -> Result<Vec<String>, DisplayError> {
         SsdpDiscovery::discover(timeout_ms)
-            .map_err(|e| DisplayError::ConnectionFailed(e))
+            .map_err(DisplayError::ConnectionFailed)
     }
 
     pub fn pairing_state(&self) -> &PairingState {

@@ -45,6 +45,7 @@ impl PatchSet {
 pub struct GreyscalePatchSet;
 
 impl GreyscalePatchSet {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(count: usize) -> PatchSet {
         let mut patches = Vec::with_capacity(count);
         for i in 0..count {

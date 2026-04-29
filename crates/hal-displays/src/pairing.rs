@@ -1,5 +1,6 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum PairingState {
+    #[default]
     Idle,
     WaitingForPin,
     Authenticated { client_key: String },

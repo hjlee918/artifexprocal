@@ -5,13 +5,12 @@ pub struct SsdpDiscovery;
 
 impl SsdpDiscovery {
     pub fn build_msearch() -> String {
-        format!(
-            "M-SEARCH * HTTP/1.1\r\n\
-             HOST: 239.255.255.250:1900\r\n\
-             MAN: \"ssdp:discover\"\r\n\
-             ST: urn:lge-com:service:webos-second-screen:1\r\n\
-             MX: 2\r\n\r\n"
-        )
+        "M-SEARCH * HTTP/1.1\r\n\
+         HOST: 239.255.255.250:1900\r\n\
+         MAN: \"ssdp:discover\"\r\n\
+         ST: urn:lge-com:service:webos-second-screen:1\r\n\
+         MX: 2\r\n\r\n"
+            .to_string()
     }
 
     pub fn discover(timeout_ms: u64) -> Result<Vec<String>, String> {
@@ -26,17 +25,12 @@ impl SsdpDiscovery {
 
         let mut ips = Vec::new();
         let mut buf = [0u8; 1024];
-        loop {
-            match socket.recv_from(&mut buf) {
-                Ok((len, _)) => {
-                    let resp = String::from_utf8_lossy(&buf[..len]);
-                    if let Some(ip) = Self::parse_location(&resp) {
-                        if !ips.contains(&ip) {
-                            ips.push(ip);
-                        }
-                    }
+        while let Ok((len, _)) = socket.recv_from(&mut buf) {
+            let resp = String::from_utf8_lossy(&buf[..len]);
+            if let Some(ip) = Self::parse_location(&resp) {
+                if !ips.contains(&ip) {
+                    ips.push(ip);
                 }
-                Err(_) => break,
             }
         }
         Ok(ips)

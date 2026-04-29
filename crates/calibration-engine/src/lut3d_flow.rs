@@ -162,7 +162,7 @@ impl Lut3DAutoCalFlow {
             &grayscale_readings,
             &self.config.target_space,
             &self.config.white_point,
-        ).map_err(|e| CalibrationError::Analysis(e))?;
+        ).map_err(CalibrationError::Analysis)?;
 
         events.send(CalibrationEvent::AnalysisComplete {
             gamma: analysis.gamma,
@@ -179,12 +179,12 @@ impl Lut3DAutoCalFlow {
         // 3D LUT generation (if tier is not GrayscaleOnly)
         if self.config.tier != CalibrationTier::GrayscaleOnly {
             let lut_3d_33 = Lut3DEngine::compute(&readings, 33, &self.config.target_space)
-                .map_err(|e| CalibrationError::Analysis(e))?;
+                .map_err(CalibrationError::Analysis)?;
 
             // Downsample to 17³ if needed
             let lut_3d = if display.model().contains("Alpha 7") {
                 Lut3DEngine::downsample_33_to_17(&lut_3d_33)
-                    .map_err(|e| CalibrationError::Analysis(e))?
+                    .map_err(CalibrationError::Analysis)?
             } else {
                 lut_3d_33
             };

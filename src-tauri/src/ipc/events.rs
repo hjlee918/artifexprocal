@@ -149,6 +149,7 @@ pub fn emit_verification_complete(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn emit_profiling_progress(
     app: &AppHandle,
     session_id: String,
@@ -247,7 +248,7 @@ pub fn emit_engine_event(
                 white_balance_errors,
             );
         }
-        CalibrationEvent::LutGenerated { size } => {
+        CalibrationEvent::LutGenerated { size: _ } => {
             emit_lut_uploaded(app, session_id.to_string());
         }
         CalibrationEvent::CorrectionsUploaded => {

@@ -1,5 +1,4 @@
 use calibration_autocal::lut::*;
-use hal::types::Lut1D;
 
 #[test]
 fn test_lut_from_corrections_identity() {

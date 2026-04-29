@@ -27,6 +27,12 @@ pub struct I1DisplayPro {
     integration_time_ms: u32,
 }
 
+impl Default for I1DisplayPro {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl I1DisplayPro {
     pub fn new() -> Self {
         #[cfg(not(target_os = "macos"))]

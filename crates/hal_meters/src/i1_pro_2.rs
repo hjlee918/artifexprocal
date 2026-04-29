@@ -37,6 +37,12 @@ pub struct I1Pro2 {
     adapter: ArgyllMeter,
 }
 
+impl Default for I1Pro2 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl I1Pro2 {
     pub fn new() -> Self {
         #[cfg(not(target_os = "macos"))]

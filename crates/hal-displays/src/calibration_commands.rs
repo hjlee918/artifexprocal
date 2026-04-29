@@ -1,6 +1,6 @@
 use hal::types::{Lut1D, Lut3D, RGBGain};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CalibrationMode {
     active: bool,
     pic_mode: Option<String>,

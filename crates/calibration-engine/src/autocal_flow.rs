@@ -147,7 +147,7 @@ impl GreyscaleAutoCalFlow {
             &readings,
             &self.config.target_space,
             &self.config.white_point,
-        ).map_err(|e| CalibrationError::Analysis(e))?;
+        ).map_err(CalibrationError::Analysis)?;
 
         events.send(CalibrationEvent::AnalysisComplete {
             gamma: analysis.gamma,

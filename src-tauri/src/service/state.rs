@@ -12,7 +12,7 @@ use tauri::AppHandle;
 struct CalibrationSession {
     session_id: String,
     config: SessionConfig,
-    pre_readings: Vec<(RGB, XYZ)>,
+    _pre_readings: Vec<(RGB, XYZ)>,
 }
 
 pub struct CalibrationService {
@@ -75,7 +75,7 @@ impl CalibrationService {
         *guard = Some(CalibrationSession {
             session_id: session_id.clone(),
             config,
-            pre_readings: Vec::new(),
+            _pre_readings: Vec::new(),
         });
         Ok(session_id)
     }
@@ -136,7 +136,7 @@ impl CalibrationService {
     pub fn disconnect_meter(&self, meter_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.meter_info.lock();
-            if guard.as_ref().map_or(true, |i| i.id != meter_id) {
+            if guard.as_ref().is_none_or(|i| i.id != meter_id) {
                 return Err(CalibrationError::MeterNotFound(meter_id.to_string()));
             }
         }
@@ -210,7 +210,7 @@ impl CalibrationService {
     pub fn disconnect_display(&self, display_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.display_info.lock();
-            if guard.as_ref().map_or(true, |i| i.id != display_id) {
+            if guard.as_ref().is_none_or(|i| i.id != display_id) {
                 return Err(CalibrationError::DisplayNotFound(display_id.to_string()));
             }
         }
