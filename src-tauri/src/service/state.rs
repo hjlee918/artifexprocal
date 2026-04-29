@@ -383,4 +383,24 @@ impl CalibrationService {
 
         Ok(())
     }
+
+    pub fn list_sessions(
+        &self,
+        filter: calibration_storage::query::SessionFilter,
+        page: usize,
+        per_page: usize,
+    ) -> Result<(Vec<calibration_storage::query::SessionSummary>, usize), String> {
+        let storage = self.storage.lock();
+        let query = calibration_storage::query::SessionQuery::new(&storage.conn);
+        query.list(&filter, page, per_page).map_err(|e| e.to_string())
+    }
+
+    pub fn get_session_detail(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<calibration_storage::query::SessionDetail>, String> {
+        let storage = self.storage.lock();
+        let query = calibration_storage::query::SessionQuery::new(&storage.conn);
+        query.get_detail(session_id).map_err(|e| e.to_string())
+    }
 }

@@ -1,6 +1,8 @@
 use crate::ipc::events;
 use crate::ipc::models::{
     AppState, CalibrationState, DeviceInfo, DisplayInfo, MeterInfo, Lut3DInfoDto,
+    SessionConfigDto, SessionDetailDto, SessionFilterDto, SessionListResponse,
+    SessionSummaryDto, ComputedResultsDto, PatchReadingDto,
 };
 use crate::service::CalibrationService;
 use std::time::Duration;
@@ -283,4 +285,122 @@ pub fn export_lut(
 ) -> Result<(), String> {
     // Placeholder: export LUT to the specified path
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_sessions(
+    service: State<'_, CalibrationService>,
+    filter: SessionFilterDto,
+    page: usize,
+    per_page: usize,
+) -> Result<SessionListResponse, String> {
+    let storage_filter = calibration_storage::query::SessionFilter {
+        target_space: filter.target_space,
+        state: filter.state,
+        date_from: filter.date_from,
+        date_to: filter.date_to,
+        search: filter.search,
+    };
+
+    let (items, total) = service.list_sessions(storage_filter, page, per_page)?;
+
+    let dtos: Vec<SessionSummaryDto> = items.into_iter().map(|s| SessionSummaryDto {
+        id: s.id,
+        name: s.name,
+        created_at: s.created_at,
+        ended_at: s.ended_at,
+        state: s.state,
+        target_space: s.target_space,
+        tier: s.tier.unwrap_or_default(),
+        patch_count: s.patch_count,
+        gamma: s.gamma,
+        max_de: s.max_de,
+        avg_de: s.avg_de,
+    }).collect();
+
+    Ok(SessionListResponse { items: dtos, total })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_session_detail(
+    service: State<'_, CalibrationService>,
+    session_id: String,
+) -> Result<SessionDetailDto, String> {
+    let detail = service.get_session_detail(&session_id)?;
+
+    let detail = detail.ok_or_else(|| "Session not found".to_string())?;
+
+    let results_dto = detail.results.map(|r| ComputedResultsDto {
+        gamma: r.gamma,
+        max_de: r.max_de,
+        avg_de: r.avg_de,
+        white_balance: r.white_balance,
+        lut_1d_size: r.lut_1d_size,
+        lut_3d_size: r.lut_3d_size,
+    });
+
+    let readings_dto: Vec<PatchReadingDto> = detail.readings.into_iter().map(|r| PatchReadingDto {
+        patch_index: r.patch_index,
+        target_rgb: r.target_rgb,
+        measured_xyz: (r.measured_xyz.x, r.measured_xyz.y, r.measured_xyz.z),
+        reading_index: r.reading_index,
+        measurement_type: r.measurement_type,
+    }).collect();
+
+    Ok(SessionDetailDto {
+        summary: SessionSummaryDto {
+            id: detail.summary.id,
+            name: detail.summary.name,
+            created_at: detail.summary.created_at,
+            ended_at: detail.summary.ended_at,
+            state: detail.summary.state,
+            target_space: detail.summary.target_space,
+            tier: detail.summary.tier.unwrap_or_default(),
+            patch_count: detail.summary.patch_count,
+            gamma: detail.summary.gamma,
+            max_de: detail.summary.max_de,
+            avg_de: detail.summary.avg_de,
+        },
+        config: SessionConfigDto {
+            name: detail.config.name,
+            target_space: format!("{:?}", detail.config.target_space),
+            tone_curve: format!("{:?}", detail.config.tone_curve),
+            white_point: format!("{:?}", detail.config.white_point),
+            patch_count: detail.config.patch_count,
+            reads_per_patch: detail.config.reads_per_patch,
+            settle_time_ms: detail.config.settle_time_ms,
+            stability_threshold: detail.config.stability_threshold,
+            tier: format!("{:?}", detail.config.tier),
+        },
+        readings: readings_dto,
+        results: results_dto,
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn export_session_data(
+    service: State<'_, CalibrationService>,
+    session_id: String,
+    format: String,
+) -> Result<String, String> {
+    let detail = service.get_session_detail(&session_id)?;
+    let detail = detail.ok_or_else(|| "Session not found".to_string())?;
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "artifexprocal_{}.{}", session_id, format.to_lowercase()));
+
+    let mut file = std::fs::File::create(&temp_path).map_err(|e| e.to_string())?;
+
+    match format.to_lowercase().as_str() {
+        "csv" => calibration_storage::export::SessionExporter::export_csv(&detail, &mut file)
+            .map_err(|e| e.to_string())?,
+        "json" => calibration_storage::export::SessionExporter::export_json(&detail, &mut file)
+            .map_err(|e| e.to_string())?,
+        _ => return Err(format!("Unsupported format: {}", format)),
+    }
+
+    Ok(temp_path.to_string_lossy().to_string())
 }

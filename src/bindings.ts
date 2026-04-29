@@ -20,6 +20,9 @@ export const commands = {
 	getTargetGamut: (targetSpace: string) => __TAURI_INVOKE<GamutDto>("get_target_gamut", { targetSpace }),
 	generate3dLut: (sessionId: string) => __TAURI_INVOKE<Lut3DInfoDto>("generate_3d_lut", { sessionId }),
 	exportLut: (sessionId: string, format: string, path: string) => __TAURI_INVOKE<null>("export_lut", { sessionId, format, path }),
+	listSessions: (filter: SessionFilterDto, page: number, perPage: number) => __TAURI_INVOKE<SessionListResponse>("list_sessions", { filter, page, perPage }),
+	getSessionDetail: (sessionId: string) => __TAURI_INVOKE<SessionDetailDto>("get_session_detail", { sessionId }),
+	exportSessionData: (sessionId: string, format: string) => __TAURI_INVOKE<string>("export_session_data", { sessionId, format }),
 };
 
 /* Types */
@@ -35,6 +38,15 @@ export type CalibrationState = "Idle" | "Connecting" | "Measuring" | "Generating
 export type Chromaticity = {
 	x: number,
 	y: number,
+};
+
+export type ComputedResultsDto = {
+	gamma: number | null,
+	max_de: number | null,
+	avg_de: number | null,
+	white_balance: string | null,
+	lut_1d_size: number | null,
+	lut_3d_size: number | null,
 };
 
 export type DeviceInfo = {
@@ -73,6 +85,14 @@ export type MeterInfo = {
 	capabilities: string[],
 };
 
+export type PatchReadingDto = {
+	patch_index: number,
+	target_rgb: [number, number, number],
+	measured_xyz: [number, number, number],
+	reading_index: number,
+	measurement_type: string,
+};
+
 export type ProfilingConfig = {
 	patch_set: string,
 	patch_scale: string,
@@ -88,6 +108,40 @@ export type SessionConfigDto = {
 	settle_time_ms: number,
 	stability_threshold: number | null,
 	tier: string,
+};
+
+export type SessionDetailDto = {
+	summary: SessionSummaryDto,
+	config: SessionConfigDto,
+	readings: PatchReadingDto[],
+	results: ComputedResultsDto | null,
+};
+
+export type SessionFilterDto = {
+	target_space: string | null,
+	state: string | null,
+	date_from: number | null,
+	date_to: number | null,
+	search: string | null,
+};
+
+export type SessionListResponse = {
+	items: SessionSummaryDto[],
+	total: number,
+};
+
+export type SessionSummaryDto = {
+	id: string,
+	name: string,
+	created_at: number,
+	ended_at: number | null,
+	state: string,
+	target_space: string,
+	tier: string,
+	patch_count: number,
+	gamma: number | null,
+	max_de: number | null,
+	avg_de: number | null,
 };
 
 
@@ -111,6 +165,9 @@ export const {
 	getTargetGamut,
 	generate3dLut,
 	exportLut,
+	listSessions,
+	getSessionDetail,
+	exportSessionData,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────

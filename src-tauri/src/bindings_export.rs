@@ -21,6 +21,9 @@ export const {
 	getTargetGamut,
 	generate3dLut,
 	exportLut,
+	listSessions,
+	getSessionDetail,
+	exportSessionData,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────
@@ -70,6 +73,9 @@ export type EventName =
                 crate::ipc::commands::get_target_gamut,
                 crate::ipc::commands::generate_3d_lut,
                 crate::ipc::commands::export_lut,
+                crate::ipc::commands::list_sessions,
+                crate::ipc::commands::get_session_detail,
+                crate::ipc::commands::export_session_data,
             ]);
 
         let path = "../src/bindings.ts";
