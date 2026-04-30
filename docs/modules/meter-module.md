@@ -1156,6 +1156,144 @@ interface ChromaticityDiagramProps {
 | `meter.export_measurements` | `ExportMeasurementsRequest` | `{ file_path: string, format: string }` | Export filtered measurements (TSV, CSV, JSON, .sp) |
 | `meter.set_tpg_patch` | `SetTpgPatchRequest` | `()` | Send live patch color to pattern generator |
 
+### 3.1.1 Phase 1 Export Schema
+
+This section defines the exact CSV and JSON export schemas shipped in Phase 1. Future phases may extend these schemas; the `schemaVersion` field identifies the format revision.
+
+#### CSV Export (`export.csv`)
+
+**RFC 4180 compliant.** Header row is mandatory. Missing numeric values are represented as empty fields (`,,`). Free-text fields (label, instrument_model) are double-quoted if they contain commas or newlines. `""` is used to escape literal quotes per RFC 4180.
+
+**Column order (fixed):**
+
+```
+measurement_uuid,schema_version,software_version,timestamp,mode,instrument_model,instrument_id,
+x,y,z,xy_x,xy_y,lab_l,lab_a,lab_b,lch_l,lch_c,lch_h,uvp_u,uvp_v,
+cct,duv,delta_e_2000,target_x,target_y,
+patch_r,patch_g,patch_b,patch_bit_depth,patch_colorspace,reference_white,
+session_id,sequence_index,label
+```
+
+**Field definitions:**
+
+| # | Field | Type | Description / Constraints |
+|---|-------|------|---------------------------|
+| 1 | `measurement_uuid` | UUID v4 (RFC 4122) | Generated per measurement; stable across re-exports. UUID is assigned at measurement time and persisted on the `MeasurementResult` struct; re-exporting the same measurement always produces the same UUID. |
+| 2 | `schema_version` | literal string | `"1.0"` for Phase 1 |
+| 3 | `software_version` | string | Application version string, e.g. `"2.0.0-phase1"` |
+| 4 | `timestamp` | ISO 8601 | Millisecond precision, Z suffix: `2026-04-30T12:00:00.123Z` |
+| 5 | `mode` | string | `Emissive` or `Ambient` |
+| 6 | `instrument_model` | string | e.g. `FakeMeter`, `i1 Display Pro Rev.B` |
+| 7 | `instrument_id` | string | Serial number, USB path, or mock ID |
+| 8–10 | `x`, `y`, `z` | f64 | CIE XYZ tristimulus values. `y` is luminance in cd/m² (CIE Y = luminance for emissive sources). |
+| 11–12 | `xy_x`, `xy_y` | f64 | CIE 1931 xy chromaticity coordinates |
+| 13–15 | `lab_l`, `lab_a`, `lab_b` | f64 | CIELAB D65¹ |
+| 16–18 | `lch_l`, `lch_c`, `lch_h` | f64 | CIE LCh (Lightness, Chroma, Hue in degrees) |
+| 19–20 | `uvp_u`, `uvp_v` | f64 | CIE 1976 u′v′ (UCS) chromaticity |
+| 21 | `cct` | f64 | Correlated color temperature in Kelvin |
+| 22 | `duv` | f64 | Distance from Planckian locus. Positive Duv = green side of the locus (higher v′ in CIE 1976 UCS); negative = magenta side, per Ohno 2013. |
+| 23 | `delta_e_2000` | f64 | vs. target; empty if no target set |
+| 24–25 | `target_x`, `target_y` | f64 | Target xy chromaticity (if set); empty otherwise |
+| 26–28 | `patch_r`, `patch_g`, `patch_b` | u16 | RGB stimulus in **16-bit full range** (0–65535). Conversion from source bit depth: `out = (raw * 65535) / (2^bit_depth − 1)` |
+| 29 | `patch_bit_depth` | u8 | Source bit depth: `8`, `10`, `12`, or `16` |
+| 30 | `patch_colorspace` | string | `BT.709`, `BT.2020`, `DCI-P3`, `Display-P3`, `sRGB`, `AdobeRGB`, `ProPhoto`, or empty |
+| 31 | `reference_white` | string | Reference white point: `"D65"` in Phase 1; extensible for D50/D55/etc. |
+| 32 | `session_id` | string | Workflow session UUID; empty in standalone mode |
+| 33 | `sequence_index` | usize | Zero-based position within session; empty if not in a session |
+| 34 | `label` | string | User-defined label; empty if unset |
+
+¹ Lab uses D65 reference white Xn = 95.047, Yn = 100.000, Zn = 108.883 (CIE 2° standard observer). |
+
+**Bit-depth conversion rule:**
+When the source patch data uses a bit depth other than 16, the export normalizes to 16-bit full range using the formula:
+```
+normalized = round(raw_value * 65535.0 / (2^bit_depth - 1))
+```
+For example, a 10-bit value of `512` becomes `round(512 * 65535 / 1023) = 32768`.
+
+#### JSON Export (`export.json`)
+
+Array of objects. Keys are camelCase to match TypeScript conventions. All numeric fields are JSON numbers (f64). `null` is used for optional fields (target, sessionId) to distinguish "unset" from "zero."
+
+```typescript
+// src/types/export.ts — single source of truth
+// Rust equivalent is auto-generated via ts-rs or specta
+
+export interface Phase1MeasurementExport {
+  measurementUuid: string;        // UUID v4
+  schemaVersion: "1.0";
+  softwareVersion: string;
+  timestamp: string;            // ISO 8601 with ms + Z
+  mode: "Emissive" | "Ambient";
+  instrument: {
+    model: string;
+    id: string;
+  };
+  xyz: { x: number; y: number; z: number };
+  xyy: { x: number; y: number; yLum: number };
+  lab: { l: number; a: number; b: number };
+  lch: { l: number; c: number; h: number };
+  uvPrime: { u: number; v: number };
+  cct: number;
+  duv: number;
+  deltaE2000: number | null;
+  target: { x: number; y: number } | null;
+  patchRgb: { r: number; g: number; b: number }; // 16-bit normalized
+  patchBitDepth: 8 | 10 | 12 | 16;
+  patchColorspace:
+    | "BT.709" | "BT.2020" | "DCI-P3" | "Display-P3"
+    | "sRGB" | "AdobeRGB" | "ProPhoto"
+    | "";
+  referenceWhite: "D65" | "D50" | "D55" | "D75" | "C" | "E"; // Phase 1 emits "D65"
+  sessionId: string | null;
+  sequenceIndex: number | null;
+  label: string;
+}
+```
+
+**Schema integrity rule:**
+The TypeScript interface above is the single source of truth. Rust types are generated from it via `ts-rs` (or `specta` if already integrated). A `schema.json` (JSON Schema draft 2020-12) is committed alongside the code at `docs/schemas/meter-export-phase1.json` and validated in CI.
+
+#### Example CSV Row (single measurement, 80% gray patch)
+
+```csv
+measurement_uuid,schema_version,software_version,timestamp,mode,instrument_model,instrument_id,x,y,z,xy_x,xy_y,lab_l,lab_a,lab_b,lch_l,lch_c,lch_h,uvp_u,uvp_v,cct,duv,delta_e_2000,target_x,target_y,patch_r,patch_g,patch_b,patch_bit_depth,patch_colorspace,reference_white,session_id,sequence_index,label
+550e8400-e29b-41d4-a716-446655440000,1.0,2.0.0-phase1,2026-04-30T12:00:00.123Z,Emissive,FakeMeter,mock:planckian-42,76.037,80.0,87.106,0.3127,0.3290,83.138,0.0,-1.803,80.0,1.803,270.0,0.1978,0.4683,6504.0,0.0,,,,52428,52428,52428,16,BT.709,D65,,0,"80% gray"
+```
+
+#### Example JSON Object (same measurement)
+
+```json
+{
+  "measurementUuid": "550e8400-e29b-41d4-a716-446655440000",
+  "schemaVersion": "1.0",
+  "softwareVersion": "2.0.0-phase1",
+  "timestamp": "2026-04-30T12:00:00.123Z",
+  "mode": "Emissive",
+  "instrument": { "model": "FakeMeter", "id": "mock:planckian-42" },
+  "xyz": { "x": 76.037, "y": 80.0, "z": 87.106 },
+  "xyy": { "x": 0.3127, "y": 0.3290, "yLum": 80.0 },
+  "lab": { "l": 83.138, "a": 0.0, "b": -1.803 },
+  "lch": { "l": 83.138, "c": 1.803, "h": 270.0 },
+  "uvPrime": { "u": 0.1978, "v": 0.4683 },
+  "cct": 6504.0,
+  "duv": 0.0,
+  "deltaE2000": null,
+  "target": null,
+  "patchRgb": { "r": 52428, "g": 52428, "b": 52428 },
+  "patchBitDepth": 16,
+  "patchColorspace": "BT.709",
+  "referenceWhite": "D65",
+  "sessionId": null,
+  "sequenceIndex": null,
+  "label": "80% gray"
+}
+```
+
+#### CI Validation
+
+A test in the `module-meter` crate generates a sample `Phase1MeasurementExport`, serializes it to JSON, and validates it against `docs/schemas/meter-export-phase1.json` using the `jsonschema` crate (or equivalent). The test fails the build on schema mismatch. A corresponding CSV test generates a sample row, parses it back with `csv` crate, and asserts each typed field matches expected values. Both tests run in CI on every commit.
+
 ### 3.2 Events (Backend → Frontend)
 
 | Event | Payload | Description |

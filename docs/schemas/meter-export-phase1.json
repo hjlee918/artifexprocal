@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artifexprocal.dev/schemas/meter-export-phase1.json",
+  "title": "Phase1MeasurementExport",
+  "description": "JSON export schema for ArtifexProCal MeterModule Phase 1 measurements.",
+  "type": "object",
+  "required": [
+    "measurementUuid",
+    "schemaVersion",
+    "softwareVersion",
+    "timestamp",
+    "mode",
+    "instrument",
+    "xyz",
+    "xyy",
+    "lab",
+    "lch",
+    "uvPrime",
+    "cct",
+    "duv",
+    "deltaE2000",
+    "target",
+    "patchRgb",
+    "patchBitDepth",
+    "patchColorspace",
+    "referenceWhite",
+    "sessionId",
+    "sequenceIndex",
+    "label"
+  ],
+  "properties": {
+    "measurementUuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "softwareVersion": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["Emissive", "Ambient"]
+    },
+    "instrument": {
+      "type": "object",
+      "required": ["model", "id"],
+      "properties": {
+        "model": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "xyz": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "xyy": {
+      "type": "object",
+      "required": ["x", "y", "yLum"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "yLum": { "type": "number" }
+      }
+    },
+    "lab": {
+      "type": "object",
+      "required": ["l", "a", "b"],
+      "properties": {
+        "l": { "type": "number" },
+        "a": { "type": "number" },
+        "b": { "type": "number" }
+      }
+    },
+    "lch": {
+      "type": "object",
+      "required": ["l", "c", "h"],
+      "properties": {
+        "l": { "type": "number" },
+        "c": { "type": "number" },
+        "h": { "type": "number" }
+      }
+    },
+    "uvPrime": {
+      "type": "object",
+      "required": ["u", "v"],
+      "properties": {
+        "u": { "type": "number" },
+        "v": { "type": "number" }
+      }
+    },
+    "cct": {
+      "type": "number"
+    },
+    "duv": {
+      "type": "number"
+    },
+    "deltaE2000": {
+      "type": ["number", "null"]
+    },
+    "target": {
+      "type": ["object", "null"],
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "patchRgb": {
+      "type": "object",
+      "required": ["r", "g", "b"],
+      "properties": {
+        "r": { "type": "number" },
+        "g": { "type": "number" },
+        "b": { "type": "number" }
+      }
+    },
+    "patchBitDepth": {
+      "type": "integer",
+      "enum": [8, 10, 12, 16]
+    },
+    "patchColorspace": {
+      "type": "string",
+      "enum": [
+        "BT.709",
+        "BT.2020",
+        "DCI-P3",
+        "Display-P3",
+        "sRGB",
+        "AdobeRGB",
+        "ProPhoto",
+        ""
+      ]
+    },
+    "referenceWhite": {
+      "type": "string",
+      "enum": ["D65", "D50", "D55", "D75", "C", "E"]
+    },
+    "sessionId": {
+      "type": ["string", "null"]
+    },
+    "sequenceIndex": {
+      "type": ["integer", "null"]
+    },
+    "label": {
+      "type": "string"
+    }
+  }
+}
