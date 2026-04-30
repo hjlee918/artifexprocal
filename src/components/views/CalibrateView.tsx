@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { CalibrationWizard } from "../calibrate/CalibrationWizard";
 import { DeviceSelectionStep } from "../calibrate/DeviceSelectionStep";
 import { TargetConfigStep } from "../calibrate/TargetConfigStep";
@@ -6,8 +7,8 @@ import { MeasurementStep } from "../calibrate/MeasurementStep";
 import { AnalysisStep } from "../calibrate/AnalysisStep";
 import { UploadStep } from "../calibrate/UploadStep";
 import { VerifyStep } from "../calibrate/VerifyStep";
-import type { WizardState, PatchReading, AnalysisResult, VerificationResult } from "../calibrate/types";
-import { startCalibration } from "../../bindings";
+import type { WizardState, PatchReading, VerificationResult } from "../calibrate/types";
+import { startCalibration, EVENT_ANALYSIS_COMPLETE, EVENT_LUT3D_DATA } from "../../bindings";
 
 export function CalibrateView() {
   const [state, setState] = useState<WizardState>({
@@ -17,6 +18,7 @@ export function CalibrateView() {
     readings: [],
     analysis: null,
     verification: null,
+    lut3d: null,
     profilingMatrix: null,
     profilingAccuracy: null,
   });
@@ -38,15 +40,56 @@ export function CalibrateView() {
     }
   };
 
-  const handleMeasurementComplete = (readings: PatchReading[]) => {
-    // Mock analysis for now
-    const analysis: AnalysisResult = {
-      gamma: 2.35,
-      max_de: 2.8,
-      avg_de: 1.2,
-      white_balance_errors: [0.02, -0.01, 0.03],
+  useEffect(() => {
+    let cancelled = false;
+    const unsubAnalysis = listen<{
+      session_id: string;
+      gamma: number;
+      max_de: number;
+      avg_de: number;
+      white_balance_errors: number[];
+    }>(EVENT_ANALYSIS_COMPLETE, (event) => {
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        step: "analyze",
+        analysis: {
+          gamma: event.payload.gamma,
+          max_de: event.payload.max_de,
+          avg_de: event.payload.avg_de,
+          white_balance_errors: [
+            event.payload.white_balance_errors[0] ?? 0,
+            event.payload.white_balance_errors[1] ?? 0,
+            event.payload.white_balance_errors[2] ?? 0,
+          ] as [number, number, number],
+        },
+      }));
+    });
+
+    const unsubLut3d = listen<{
+      session_id: string;
+      size: number;
+      data: number[];
+    }>(EVENT_LUT3D_DATA, (event) => {
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        lut3d: {
+          size: event.payload.size,
+          data: event.payload.data,
+        },
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+      unsubAnalysis.then((u) => u());
+      unsubLut3d.then((u) => u());
     };
-    setState((s) => ({ ...s, step: "analyze", readings, analysis }));
+  }, []);
+
+  const handleMeasurementComplete = (_readings: PatchReading[]) => {
+    // Analysis is now driven by backend analysis-complete event
   };
 
   const handleApplyCorrections = () => {
@@ -91,8 +134,11 @@ export function CalibrateView() {
           <AnalysisStep
             readings={state.readings}
             analysis={state.analysis}
+            targetSpace={state.config?.target_space}
             onApply={handleApplyCorrections}
             onRemeasure={() => setState((s) => ({ ...s, step: "target" }))}
+            tier={state.config?.tier}
+            lut3d={state.lut3d}
           />
         )}
         {state.step === "upload" && (

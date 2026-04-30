@@ -59,6 +59,10 @@ impl DisplayController for FakeDisplayController {
         self.connected = false;
     }
 
+    fn model(&self) -> &str {
+        "FakeDisplay"
+    }
+
     fn set_picture_mode(&mut self, mode: &str) -> Result<(), DisplayError> {
         if !self.connected {
             return Err(DisplayError::ConnectionFailed("Not connected".to_string()));

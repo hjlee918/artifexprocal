@@ -1,5 +1,4 @@
 use color_science::types::*;
-use color_science::conversion::*;
 
 #[test]
 fn test_xyz_creation() {

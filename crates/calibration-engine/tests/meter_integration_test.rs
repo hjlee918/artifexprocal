@@ -1,5 +1,5 @@
 use calibration_engine::autocal_flow::*;
-use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint};
+use calibration_core::state::{SessionConfig, TargetSpace, ToneCurve, WhitePoint, CalibrationTier};
 use calibration_storage::schema::Storage;
 use calibration_engine::events::EventChannel;
 use hal::traits::{Meter, DisplayController, PatternGenerator};
@@ -41,6 +41,7 @@ struct MockDisplay;
 impl DisplayController for MockDisplay {
     fn connect(&mut self) -> Result<(), DisplayError> { Ok(()) }
     fn disconnect(&mut self) {}
+    fn model(&self) -> &str { "MockDisplay" }
     fn set_picture_mode(&mut self, _m: &str) -> Result<(), DisplayError> { Ok(()) }
     fn upload_1d_lut(&mut self, _l: &Lut1D) -> Result<(), DisplayError> { Ok(()) }
     fn upload_3d_lut(&mut self, _l: &Lut3D) -> Result<(), DisplayError> { Ok(()) }
@@ -67,6 +68,7 @@ fn test_calibration_with_simulated_meter() {
         reads_per_patch: 1,
         settle_time_ms: 0,
         stability_threshold: None,
+        tier: CalibrationTier::GrayscaleOnly,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);

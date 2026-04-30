@@ -96,7 +96,7 @@ fn test_debug_i1_display_pro_raw() {
 #[test]
 #[ignore = "debug all HID devices"]
 fn test_debug_all_hid_devices() {
-    let ctx = HidContext::new().expect("Failed to init HID");
+    let _ctx = HidContext::new().expect("Failed to init HID");
     let api = hidapi::HidApi::new().unwrap();
     println!("All HID devices:");
     for dev in api.device_list() {

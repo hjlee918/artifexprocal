@@ -1,4 +1,5 @@
 use hal::error::*;
+use hal::traits::*;
 
 #[test]
 fn test_meter_error_display() {
@@ -24,23 +25,25 @@ fn test_pattern_gen_error_display() {
     assert_eq!(err.to_string(), "Display error: Patch failed");
 }
 
-use hal::traits::*;
 use hal::mocks::*;
 
 #[test]
 fn test_mock_meter_compiles() {
+    use hal::traits::Meter;
     let meter = FakeMeter::default();
     let _dyn_meter: &dyn Meter = &meter;
 }
 
 #[test]
 fn test_mock_display_compiles() {
+    use hal::traits::DisplayController;
     let display = FakeDisplayController::default();
     let _dyn_display: &dyn DisplayController = &display;
 }
 
 #[test]
 fn test_mock_pattern_gen_compiles() {
+    use hal::traits::PatternGenerator;
     let gen = FakePatternGenerator::default();
     let _dyn_gen: &dyn PatternGenerator = &gen;
 }
@@ -77,7 +80,6 @@ fn test_mock_end_to_end_measurement_and_upload() {
 }
 
 use hal::devices::sony_projector::SonyProjectorController;
-use hal::traits::DisplayController;
 
 #[test]
 fn test_sony_projector_connect_valid_ip() {
@@ -113,7 +115,6 @@ fn test_lg_oled_set_picture_mode_stub() {
 }
 
 use hal::devices::xrite_i1_display_pro::I1DisplayPro;
-use hal::traits::Meter;
 
 #[test]
 fn test_i1_display_pro_connect() {
@@ -133,7 +134,6 @@ fn test_i1_display_pro_read_xyz_stub() {
 }
 
 use hal::devices::pgenerator::PGenerator;
-use hal::traits::PatternGenerator;
 
 #[test]
 fn test_pgenerator_connect_valid_ip() {

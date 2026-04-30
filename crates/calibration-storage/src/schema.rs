@@ -30,9 +30,12 @@ impl Storage {
                 name        TEXT NOT NULL,
                 created_at  INTEGER NOT NULL,
                 updated_at  INTEGER NOT NULL,
+                ended_at    INTEGER,
                 state       TEXT NOT NULL,
                 config_json TEXT NOT NULL,
                 target_space TEXT NOT NULL,
+                tier        TEXT,
+                patch_count INTEGER,
                 error_json  TEXT
             );
 
@@ -60,6 +63,8 @@ impl Storage {
                 max_de       REAL,
                 avg_de       REAL,
                 lut_1d_json  TEXT,
+                lut_3d_size  INTEGER,
+                lut_3d_json  TEXT,
                 white_balance TEXT,
                 computed_at  INTEGER NOT NULL
             );
@@ -71,6 +76,10 @@ impl Storage {
                 expires_at   TEXT NOT NULL
             );
             "#
-        )
+        )?;
+
+        crate::migration::run_migrations(&self.conn)?;
+
+        Ok(())
     }
 }

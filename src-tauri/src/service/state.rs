@@ -12,7 +12,7 @@ use tauri::AppHandle;
 struct CalibrationSession {
     session_id: String,
     config: SessionConfig,
-    pre_readings: Vec<(RGB, XYZ)>,
+    _pre_readings: Vec<(RGB, XYZ)>,
 }
 
 pub struct CalibrationService {
@@ -75,7 +75,7 @@ impl CalibrationService {
         *guard = Some(CalibrationSession {
             session_id: session_id.clone(),
             config,
-            pre_readings: Vec::new(),
+            _pre_readings: Vec::new(),
         });
         Ok(session_id)
     }
@@ -136,7 +136,7 @@ impl CalibrationService {
     pub fn disconnect_meter(&self, meter_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.meter_info.lock();
-            if guard.as_ref().map_or(true, |i| i.id != meter_id) {
+            if guard.as_ref().is_none_or(|i| i.id != meter_id) {
                 return Err(CalibrationError::MeterNotFound(meter_id.to_string()));
             }
         }
@@ -210,7 +210,7 @@ impl CalibrationService {
     pub fn disconnect_display(&self, display_id: &str) -> Result<(), CalibrationError> {
         {
             let guard = self.display_info.lock();
-            if guard.as_ref().map_or(true, |i| i.id != display_id) {
+            if guard.as_ref().is_none_or(|i| i.id != display_id) {
                 return Err(CalibrationError::DisplayNotFound(display_id.to_string()));
             }
         }
@@ -324,7 +324,7 @@ impl CalibrationService {
         let active_session_arc = self.active_session.clone();
 
         std::thread::spawn(move || {
-            let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
+            let use_3d = config.tier != calibration_core::state::CalibrationTier::GrayscaleOnly;
 
             let storage = match Storage::new_in_memory() {
                 Ok(s) => s,
@@ -357,7 +357,13 @@ impl CalibrationService {
             let display = &mut **display_guard.as_mut().unwrap();
             let pattern_gen = &mut **pg_guard.as_mut().unwrap();
 
-            let result = flow.run_sync(meter, display, pattern_gen, &storage, &events);
+            let result = if use_3d {
+                let mut flow = calibration_engine::lut3d_flow::Lut3DAutoCalFlow::new(config);
+                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+            } else {
+                let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
+                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+            };
 
             if let Err(e) = result {
                 if abort_flag.load(Ordering::SeqCst) {
@@ -382,5 +388,25 @@ impl CalibrationService {
         });
 
         Ok(())
+    }
+
+    pub fn list_sessions(
+        &self,
+        filter: calibration_storage::query::SessionFilter,
+        page: usize,
+        per_page: usize,
+    ) -> Result<(Vec<calibration_storage::query::SessionSummary>, usize), String> {
+        let storage = self.storage.lock();
+        let query = calibration_storage::query::SessionQuery::new(&storage.conn);
+        query.list(&filter, page, per_page).map_err(|e| e.to_string())
+    }
+
+    pub fn get_session_detail(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<calibration_storage::query::SessionDetail>, String> {
+        let storage = self.storage.lock();
+        let query = calibration_storage::query::SessionQuery::new(&storage.conn);
+        query.get_detail(session_id).map_err(|e| e.to_string())
     }
 }

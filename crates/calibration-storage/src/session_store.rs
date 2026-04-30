@@ -39,9 +39,12 @@ impl<'a> SessionStore<'a> {
             TargetSpace::Custom { .. } => "Custom",
         };
 
+        let tier = format!("{:?}", config.tier);
+        let patch_count = config.patch_count as i64;
+
         self.conn.execute(
-            "INSERT INTO sessions (id, name, created_at, updated_at, state, config_json, target_space, error_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO sessions (id, name, created_at, updated_at, state, config_json, target_space, tier, patch_count, error_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 &id,
                 &config.name,
@@ -50,6 +53,8 @@ impl<'a> SessionStore<'a> {
                 "idle",
                 &config_json,
                 target_space,
+                &tier,
+                patch_count,
                 Option::<&str>::None,
             ],
         )?;
@@ -88,10 +93,19 @@ impl<'a> SessionStore<'a> {
             .unwrap_or_default()
             .as_millis() as i64;
 
-        self.conn.execute(
-            "UPDATE sessions SET state = ?1, updated_at = ?2 WHERE id = ?3",
-            params![state, now, id],
-        )?;
+        let is_terminal = matches!(state, "finished" | "error" | "aborted");
+
+        if is_terminal {
+            self.conn.execute(
+                "UPDATE sessions SET state = ?1, updated_at = ?2, ended_at = ?3 WHERE id = ?4",
+                params![state, now, now, id],
+            )?;
+        } else {
+            self.conn.execute(
+                "UPDATE sessions SET state = ?1, updated_at = ?2 WHERE id = ?3",
+                params![state, now, id],
+            )?;
+        }
         Ok(())
     }
 }

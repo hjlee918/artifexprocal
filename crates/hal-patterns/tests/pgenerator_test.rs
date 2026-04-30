@@ -1,4 +1,4 @@
-use hal::traits::{PatternGenerator, PatternGeneratorExt};
+use hal::traits::PatternGeneratorExt;
 use hal_patterns::pgenerator::*;
 
 #[test]
