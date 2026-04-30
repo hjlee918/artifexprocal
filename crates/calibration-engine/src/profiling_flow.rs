@@ -1,6 +1,8 @@
 use calibration_core::state::{CalibrationEvent, CalibrationError};
 use calibration_core::measure::MeasurementLoop;
 use calibration_core::patch::{Patch, PatchSet};
+use calibration_storage::profiling_session_store::ProfilingSessionStore;
+use calibration_storage::schema::Storage;
 use color_science::delta_e::delta_e_2000;
 use color_science::types::{RGB, XYZ, WhitePoint};
 use hal::traits::{Meter, PatternGenerator};
@@ -118,11 +120,20 @@ impl ProfilingFlow {
 
     pub fn run_sync(
         &mut self,
+        session_id: &str,
+        field_meter_id: &str,
+        reference_meter_id: &str,
+        display_id: Option<&str>,
         reference_meter: &mut dyn Meter,
         field_meter: &mut dyn Meter,
         pattern_gen: &mut dyn PatternGenerator,
+        storage: &Storage,
         events: &EventChannel,
     ) -> Result<(), CalibrationError> {
+        let store = ProfilingSessionStore::new(&storage.conn);
+        store.create(session_id, session_id, field_meter_id, reference_meter_id, display_id)
+            .map_err(|e| CalibrationError::InvalidConfig(e.to_string()))?;
+
         // Connect devices
         reference_meter.connect().map_err(|e| CalibrationError::ConnectionFailed {
             device: "reference_meter".to_string(),
@@ -192,6 +203,12 @@ impl ProfilingFlow {
             let field_lab = field_xyz.to_lab(wp);
             let de = delta_e_2000(&ref_lab, &field_lab);
 
+            store.save_reading(session_id, i, &rgb, &ref_xyz, &field_xyz, de)
+                .map_err(|e| CalibrationError::MeasurementFailed {
+                    patch_index: i,
+                    reason: e.to_string(),
+                })?;
+
             events.send(CalibrationEvent::ProfilingProgress {
                 patch_index: i,
                 total_patches: total,
@@ -214,6 +231,11 @@ impl ProfilingFlow {
 
         let accuracy = matrix.accuracy(&self.meter_readings, &self.reference_readings);
         let matrix_array = matrix.m;
+
+        store.save_result(session_id, &matrix_array, accuracy, total)
+            .map_err(|e| CalibrationError::Analysis(e.to_string()))?;
+        store.update_state(session_id, "finished")
+            .map_err(|e| CalibrationError::InvalidConfig(e.to_string()))?;
 
         self.correction_matrix = Some(matrix_array);
         self.accuracy = Some(accuracy);
@@ -295,10 +317,14 @@ mod tests {
         let mut field_meter = ProfilingMeter::new(1.0);
         let mut pattern_gen = FakePatternGenerator::default();
 
+        let storage = Storage::new_in_memory().unwrap();
         let events = EventChannel::new(16);
 
-        flow.run_sync(&mut reference_meter, &mut field_meter, &mut pattern_gen, &events)
-            .unwrap();
+        flow.run_sync(
+            "test-session", "meter1", "meter2", None,
+            &mut reference_meter, &mut field_meter, &mut pattern_gen, &storage, &events,
+        )
+        .unwrap();
 
         assert_eq!(flow.reference_readings.len(), 20);
         assert_eq!(flow.meter_readings.len(), 20);
@@ -333,10 +359,14 @@ mod tests {
         let mut field_meter = ProfilingMeter::new(2.0);
         let mut pattern_gen = FakePatternGenerator::default();
 
+        let storage = Storage::new_in_memory().unwrap();
         let events = EventChannel::new(16);
 
-        flow.run_sync(&mut reference_meter, &mut field_meter, &mut pattern_gen, &events)
-            .unwrap();
+        flow.run_sync(
+            "test-session", "meter1", "meter2", None,
+            &mut reference_meter, &mut field_meter, &mut pattern_gen, &storage, &events,
+        )
+        .unwrap();
 
         let matrix = flow.correction_matrix.unwrap();
         // With 2x readings, matrix should be approximately 0.5 * I

@@ -39,6 +39,7 @@ pub fn run() {
             ipc::commands::abort_calibration,
             ipc::commands::start_profiling,
             ipc::commands::abort_profiling,
+            ipc::commands::export_profiling_ccmx,
             ipc::commands::get_spectral_locus,
             ipc::commands::get_target_gamut,
         ])

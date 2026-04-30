@@ -69,6 +69,32 @@ impl Storage {
                 computed_at  INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS profiling_sessions (
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                created_at      INTEGER NOT NULL,
+                ended_at        INTEGER,
+                state           TEXT NOT NULL,
+                field_meter_id  TEXT NOT NULL,
+                reference_meter_id TEXT NOT NULL,
+                display_id      TEXT,
+                patch_count     INTEGER,
+                matrix_json     TEXT,
+                accuracy        REAL,
+                error_json      TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS profiling_readings (
+                session_id    TEXT NOT NULL REFERENCES profiling_sessions(id) ON DELETE CASCADE,
+                patch_index   INTEGER NOT NULL,
+                target_rgb    TEXT NOT NULL,
+                reference_xyz TEXT NOT NULL,
+                meter_xyz     TEXT NOT NULL,
+                delta_e       REAL NOT NULL,
+                measured_at   INTEGER NOT NULL,
+                PRIMARY KEY (session_id, patch_index)
+            );
+
             CREATE TABLE IF NOT EXISTS meter_initializations (
                 meter_serial TEXT PRIMARY KEY,
                 meter_model  TEXT NOT NULL,

@@ -211,6 +211,38 @@ pub fn abort_profiling(
 
 #[tauri::command]
 #[specta::specta]
+pub fn export_profiling_ccmx(
+    service: State<'_, CalibrationService>,
+    session_id: String,
+    path: String,
+) -> Result<(), String> {
+    let storage = service.storage_conn();
+    let store = calibration_storage::profiling_session_store::ProfilingSessionStore::new(
+        &storage.conn,
+    );
+    let session = store.get(&session_id)
+        .map_err(|e| format!("Failed to load profiling session: {e}"))?;
+
+    let matrix = session.matrix
+        .ok_or_else(|| "No correction matrix available for this session".to_string())?;
+
+    let corr = hal_meters::profiling::CorrectionMatrix { m: matrix };
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| format!("Failed to create file: {e}"))?;
+
+    hal_meters::profiling::export_ccmx(
+        &corr,
+        &session.field_meter_id,
+        &session.reference_meter_id,
+        &mut file,
+    )
+    .map_err(|e| format!("Export failed: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn get_spectral_locus(diagram: String) -> Result<Vec<(f64, f64)>, String> {
     match diagram.as_str() {
         "1931" => Ok(color_science::diagrams::SPECTRAL_LOCUS_1931.to_vec()),

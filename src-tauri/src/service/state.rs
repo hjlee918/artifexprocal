@@ -238,6 +238,10 @@ impl CalibrationService {
         }
     }
 
+    pub fn storage_conn(&self) -> parking_lot::MutexGuard<'_, calibration_storage::schema::Storage> {
+        self.storage.lock()
+    }
+
     pub fn connect_display(&self, display_id: &str) -> Result<DisplayInfo, CalibrationError> {
         let known_displays: Vec<(&str, &str, &str)> = vec![
             ("lg-oled", "LG OLED", "LG OLED C1/C2/C3"),
@@ -509,6 +513,16 @@ impl CalibrationService {
         let state_arc = self.state.clone();
 
         std::thread::spawn(move || {
+            let storage = match Storage::new_in_memory() {
+                Ok(s) => s,
+                Err(e) => {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "error".into(), format!("Storage init failed: {}", e), "run_profiling".into()
+                    );
+                    return;
+                }
+            };
+
             let events = calibration_engine::events::EventChannel::new(256);
             let mut rx = events.subscribe();
 
@@ -532,7 +546,10 @@ impl CalibrationService {
             let config = calibration_engine::profiling_flow::ProfilingConfig::default();
             let mut flow = calibration_engine::profiling_flow::ProfilingFlow::new(config);
 
-            let result = flow.run_sync(ref_meter, meter, pattern_gen, &events);
+            let result = flow.run_sync(
+                &session_id, "field_meter", "reference_meter", None,
+                ref_meter, meter, pattern_gen, &storage, &events,
+            );
 
             if let Err(e) = result {
                 if abort_flag.load(Ordering::SeqCst) {
