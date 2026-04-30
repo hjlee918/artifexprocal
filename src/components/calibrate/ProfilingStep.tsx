@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { startProfiling } from "../../bindings";
-import { EVENT_PROFILING_PROGRESS, type ProfilingProgress } from "../../bindings";
+import { EVENT_PROFILING_PROGRESS, type ProfilingProgress, EVENT_PROFILING_COMPLETE } from "../../bindings";
+
+interface ProfilingCompletePayload {
+  session_id: string;
+  correction_matrix: number[][];
+  accuracy_estimate: number;
+}
 
 export function ProfilingStep({
   meterId,
@@ -21,6 +27,9 @@ export function ProfilingStep({
   const [totalPatches] = useState(20);
   const [patchName, setPatchName] = useState("Starting...");
   const [results, setResults] = useState<ProfilingProgress[]>([]);
+  const [correctionMatrix, setCorrectionMatrix] = useState<number[][] | null>(null);
+  const [accuracyEstimate, setAccuracyEstimate] = useState<number | null>(null);
+  const [isComplete, setIsComplete] = useState(false);
 
   useEffect(() => {
     startProfiling(meterId, referenceMeterId, displayId, {
@@ -44,9 +53,16 @@ export function ProfilingStep({
         return [...filtered, p];
       });
     });
+    const completeUnsubPromise = listen<ProfilingCompletePayload>(EVENT_PROFILING_COMPLETE, (event) => {
+      if (event.payload.session_id !== sessionId || cancelled) return;
+      setCorrectionMatrix(event.payload.correction_matrix);
+      setAccuracyEstimate(event.payload.accuracy_estimate);
+      setIsComplete(true);
+    });
     return () => {
       cancelled = true;
       unsubPromise.then((u) => u());
+      completeUnsubPromise.then((u) => u());
     };
   }, [sessionId]);
 
@@ -90,19 +106,21 @@ export function ProfilingStep({
         </table>
       </div>
 
-      {/* Matrix preview (mock) */}
-      {results.length >= totalPatches && (
+      {/* Matrix preview */}
+      {isComplete && correctionMatrix && (
         <div className="bg-gray-800 border border-gray-800 rounded-lg p-4">
           <div className="text-sm font-medium mb-2">Correction Matrix</div>
-          <div className="text-xs text-gray-400 mb-2">Average dE: {avgDe.toFixed(2)}</div>
+          <div className="text-xs text-gray-400 mb-2">
+            Average dE: {accuracyEstimate?.toFixed(2) ?? avgDe.toFixed(2)}
+          </div>
           <div className="grid grid-cols-3 gap-2 text-sm font-mono">
-            {[1.02, -0.01, 0.03, -0.02, 1.01, 0.01, 0.01, -0.03, 1.04].map((v, i) => (
-              <div key={i} className="bg-gray-900 border border-gray-800 rounded px-2 py-1 text-center">{v.toFixed(3)}</div>
+            {correctionMatrix.flat().map((v, i) => (
+              <div key={i} className="bg-gray-900 border border-gray-800 rounded px-2 py-1 text-center">{v.toFixed(4)}</div>
             ))}
           </div>
           <div className="flex gap-3 mt-4">
             <button
-              onClick={() => onComplete([[1.02, -0.01, 0.03], [-0.02, 1.01, 0.01], [0.01, -0.03, 1.04]], avgDe)}
+              onClick={() => onComplete(correctionMatrix, accuracyEstimate ?? avgDe)}
               className="px-4 py-2 rounded-lg bg-primary text-white text-sm hover:bg-sky-400 transition"
             >
               Accept &amp; Save

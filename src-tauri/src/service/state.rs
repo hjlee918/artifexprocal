@@ -29,6 +29,7 @@ pub struct CalibrationService {
     storage: Arc<Mutex<Storage>>,
     abort_flag: Arc<AtomicBool>,
     pub(crate) active_manual_flow: Arc<Mutex<Option<calibration_engine::manual_flow::ManualCalibrationFlow>>>,
+    active_correction_matrix: Arc<Mutex<Option<[[f64; 3]; 3]>>>,
 }
 
 impl Default for CalibrationService {
@@ -58,6 +59,7 @@ impl CalibrationService {
             storage: Arc::new(Mutex::new(storage)),
             abort_flag: Arc::new(AtomicBool::new(false)),
             active_manual_flow: Arc::new(Mutex::new(None)),
+            active_correction_matrix: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -92,6 +94,18 @@ impl CalibrationService {
 
     pub fn end_session(&self) {
         *self.active_session.lock() = None;
+    }
+
+    pub fn set_active_correction_matrix(&self, matrix: [[f64; 3]; 3]) {
+        *self.active_correction_matrix.lock() = Some(matrix);
+    }
+
+    pub fn clear_active_correction_matrix(&self) {
+        *self.active_correction_matrix.lock() = None;
+    }
+
+    pub fn get_active_correction_matrix(&self) -> Option<[[f64; 3]; 3]> {
+        *self.active_correction_matrix.lock()
     }
 
     pub fn connect_meter(&self, meter_id: &str) -> Result<MeterInfo, CalibrationError> {
@@ -409,6 +423,7 @@ impl CalibrationService {
         let pattern_gen_arc = self.pattern_gen.clone();
         let state_arc = self.state.clone();
         let active_session_arc = self.active_session.clone();
+        let correction_matrix_arc = self.active_correction_matrix.clone();
 
         std::thread::spawn(move || {
             let use_3d = config.tier != calibration_core::state::CalibrationTier::GrayscaleOnly;
@@ -446,10 +461,26 @@ impl CalibrationService {
 
             let result = if use_3d {
                 let mut flow = calibration_engine::lut3d_flow::Lut3DAutoCalFlow::new(config);
-                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+                if let Some(matrix) = *correction_matrix_arc.lock() {
+                    let mut corrected = crate::service::correcting_meter::CorrectingMeter::new(
+                        meter,
+                        hal_meters::profiling::CorrectionMatrix { m: matrix },
+                    );
+                    flow.run_sync(&mut corrected, display, pattern_gen, &storage, &events)
+                } else {
+                    flow.run_sync(meter, display, pattern_gen, &storage, &events)
+                }
             } else {
                 let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
-                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+                if let Some(matrix) = *correction_matrix_arc.lock() {
+                    let mut corrected = crate::service::correcting_meter::CorrectingMeter::new(
+                        meter,
+                        hal_meters::profiling::CorrectionMatrix { m: matrix },
+                    );
+                    flow.run_sync(&mut corrected, display, pattern_gen, &storage, &events)
+                } else {
+                    flow.run_sync(meter, display, pattern_gen, &storage, &events)
+                }
             };
 
             if let Err(e) = result {
@@ -636,8 +667,17 @@ impl CalibrationService {
             let display = &mut **display_guard.as_mut().unwrap();
             let pattern_gen = &mut **pg_guard.as_mut().unwrap();
 
-            flow.start(meter, display, pattern_gen, &events)
-                .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            if let Some(matrix) = self.get_active_correction_matrix() {
+                let mut corrected = crate::service::correcting_meter::CorrectingMeter::new(
+                    meter,
+                    hal_meters::profiling::CorrectionMatrix { m: matrix },
+                );
+                flow.start(&mut corrected, display, pattern_gen, &events)
+                    .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            } else {
+                flow.start(meter, display, pattern_gen, &events)
+                    .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            }
         }
 
         drop(events);
@@ -667,8 +707,17 @@ impl CalibrationService {
             let meter = &mut **meter_guard.as_mut().unwrap();
             let pattern_gen = &mut **pg_guard.as_mut().unwrap();
 
-            flow.measure_current(meter, pattern_gen, &events)
-                .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            if let Some(matrix) = self.get_active_correction_matrix() {
+                let mut corrected = crate::service::correcting_meter::CorrectingMeter::new(
+                    meter,
+                    hal_meters::profiling::CorrectionMatrix { m: matrix },
+                );
+                flow.measure_current(&mut corrected, pattern_gen, &events)
+                    .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            } else {
+                flow.measure_current(meter, pattern_gen, &events)
+                    .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            }
         }
 
         let session_id = flow.session_id.clone();

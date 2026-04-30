@@ -244,6 +244,33 @@ pub fn export_profiling_ccmx(
 
 #[tauri::command]
 #[specta::specta]
+pub fn set_active_correction_matrix(
+    service: State<'_, CalibrationService>,
+    matrix: [[f64; 3]; 3],
+) -> Result<(), String> {
+    service.set_active_correction_matrix(matrix);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clear_active_correction_matrix(
+    service: State<'_, CalibrationService>,
+) -> Result<(), String> {
+    service.clear_active_correction_matrix();
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_active_correction_matrix(
+    service: State<'_, CalibrationService>,
+) -> Result<Option<[[f64; 3]; 3]>, String> {
+    Ok(service.get_active_correction_matrix())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn start_manual_calibration(
     app: AppHandle,
     service: State<'_, CalibrationService>,
