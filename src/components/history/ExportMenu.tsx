@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from "react";
 
 interface ExportMenuProps {
   onExport: (format: string) => void;
+  onGenerateReport?: () => void;
 }
 
-export function ExportMenu({ onExport }: ExportMenuProps) {
+export function ExportMenu({ onExport, onGenerateReport }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -40,6 +41,17 @@ export function ExportMenu({ onExport }: ExportMenuProps) {
               {fmt}
             </button>
           ))}
+          {onGenerateReport && (
+            <button
+              className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-700 border-t border-gray-700"
+              onClick={() => {
+                onGenerateReport();
+                setOpen(false);
+              }}
+            >
+              Generate Report
+            </button>
+          )}
         </div>
       )}
     </div>

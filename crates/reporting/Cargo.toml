@@ -1,0 +1,19 @@
+[package]
+name = "reporting"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+calibration-storage = { path = "../calibration-storage" }
+calibration-core = { path = "../calibration-core" }
+color-science = { path = "../color-science" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1.0"
+chrono = "0.4"
+printpdf = "0.7"
+specta = { version = "=2.0.0-rc.24", features = ["derive"] }
+
+[dev-dependencies]
+calibration-storage = { path = "../calibration-storage" }

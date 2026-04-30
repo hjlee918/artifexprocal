@@ -23,6 +23,7 @@ export const commands = {
 	listSessions: (filter: SessionFilterDto, page: number, perPage: number) => __TAURI_INVOKE<SessionListResponse>("list_sessions", { filter, page, perPage }),
 	getSessionDetail: (sessionId: string) => __TAURI_INVOKE<SessionDetailDto>("get_session_detail", { sessionId }),
 	exportSessionData: (sessionId: string, format: string) => __TAURI_INVOKE<string>("export_session_data", { sessionId, format }),
+	generateReport: (request: ReportRequestDto) => __TAURI_INVOKE<ReportResponseDto>("generate_report", { request }),
 };
 
 /* Types */
@@ -98,6 +99,22 @@ export type ProfilingConfig = {
 	patch_scale: string,
 };
 
+export type ReportFormat = "Html" | "Pdf";
+
+export type ReportRequestDto = {
+	session_id: string,
+	template: ReportTemplate,
+	format: ReportFormat,
+	compare_session_id: string | null,
+};
+
+export type ReportResponseDto = {
+	path: string,
+	format: ReportFormat,
+};
+
+export type ReportTemplate = "QuickSummary" | "Detailed" | "PrePostComparison";
+
 export type SessionConfigDto = {
 	name: string,
 	target_space: string,
@@ -168,6 +185,7 @@ export const {
 	listSessions,
 	getSessionDetail,
 	exportSessionData,
+	generateReport,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────

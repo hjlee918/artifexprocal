@@ -3,6 +3,7 @@ import { commands, SessionSummaryDto, SessionDetailDto, SessionFilterDto } from 
 import { SessionTable } from "../history/SessionTable";
 import { SessionDetailView } from "../history/SessionDetailView";
 import { SessionCompareView } from "../history/SessionCompareView";
+import { ReportDialog } from "../history/ReportDialog";
 
 export function HistoryView() {
   const [mode, setMode] = useState<"list" | "detail" | "compare">("list");
@@ -21,6 +22,9 @@ export function HistoryView() {
     search: null,
   });
   const [error, setError] = useState<string | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSessionId, setReportSessionId] = useState<string>("");
+  const [reportSessionName, setReportSessionName] = useState<string>("");
 
   useEffect(() => {
     loadSessions();
@@ -74,6 +78,12 @@ export function HistoryView() {
     }
   }
 
+  function openReportDialog(id: string, name: string) {
+    setReportSessionId(id);
+    setReportSessionName(name);
+    setReportOpen(true);
+  }
+
   if (mode === "detail" && detail) {
     return (
       <SessionDetailView
@@ -84,6 +94,7 @@ export function HistoryView() {
         }}
         onExport={handleExport}
         onCompare={() => startCompare(detail.summary.id)}
+        onGenerateReport={() => openReportDialog(detail.summary.id, detail.summary.name)}
       />
     );
   }
@@ -193,6 +204,21 @@ export function HistoryView() {
         onView={viewSession}
         onCompare={startCompare}
       />
+
+      {reportOpen && (
+        <ReportDialog
+          sessionId={reportSessionId}
+          sessionName={reportSessionName}
+          compareSessions={sessions
+            .filter((s) => s.id !== reportSessionId)
+            .map((s) => ({ id: s.id, name: s.name }))}
+          onClose={() => {
+            setReportOpen(false);
+            setReportSessionId("");
+            setReportSessionName("");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -404,3 +404,51 @@ pub fn export_session_data(
 
     Ok(temp_path.to_string_lossy().to_string())
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn generate_report(
+    service: State<'_, CalibrationService>,
+    request: crate::ipc::models::ReportRequestDto,
+) -> Result<crate::ipc::models::ReportResponseDto, String> {
+    let detail = service
+        .get_session_detail(&request.session_id)?
+        .ok_or_else(|| "Session not found".to_string())?;
+
+    let compare = if let Some(ref id) = request.compare_session_id {
+        Some(
+            service
+                .get_session_detail(id)?
+                .ok_or_else(|| "Comparison session not found".to_string())?,
+        )
+    } else {
+        None
+    };
+
+    let bytes = reporting::ReportEngine::generate(
+        request.template,
+        request.format,
+        &detail,
+        compare.as_ref(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let ext = match request.format {
+        reporting::types::ReportFormat::Html => "html",
+        reporting::types::ReportFormat::Pdf => "pdf",
+    };
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "artifexprocal_report_{}.{}_{}",
+        request.session_id,
+        request.template.to_string().to_lowercase().replace(" ", "_").replace("/", "_"),
+        ext
+    ));
+
+    std::fs::write(&temp_path, bytes).map_err(|e| e.to_string())?;
+
+    Ok(crate::ipc::models::ReportResponseDto {
+        path: temp_path.to_string_lossy().to_string(),
+        format: request.format,
+    })
+}

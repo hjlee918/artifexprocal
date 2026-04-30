@@ -185,3 +185,17 @@ pub struct SessionListResponse {
     pub items: Vec<SessionSummaryDto>,
     pub total: usize,
 }
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ReportRequestDto {
+    pub session_id: String,
+    pub template: reporting::types::ReportTemplate,
+    pub format: reporting::types::ReportFormat,
+    pub compare_session_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ReportResponseDto {
+    pub path: String,
+    pub format: reporting::types::ReportFormat,
+}

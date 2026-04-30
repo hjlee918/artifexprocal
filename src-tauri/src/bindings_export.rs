@@ -24,6 +24,7 @@ export const {
 	listSessions,
 	getSessionDetail,
 	exportSessionData,
+	generateReport,
 } = commands;
 
 // ─── Event constants (manually maintained) ─────────────────────────────────
@@ -76,6 +77,7 @@ export type EventName =
                 crate::ipc::commands::list_sessions,
                 crate::ipc::commands::get_session_detail,
                 crate::ipc::commands::export_session_data,
+                crate::ipc::commands::generate_report,
             ]);
 
         let path = "../src/bindings.ts";

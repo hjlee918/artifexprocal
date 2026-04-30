@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { SessionDetailDto } from "../../bindings";
+import { ExportMenu } from "./ExportMenu";
 
 interface SessionDetailViewProps {
   detail: SessionDetailDto;
   onBack: () => void;
   onExport: (format: string) => void;
   onCompare: () => void;
+  onGenerateReport?: () => void;
 }
 
 export function SessionDetailView({
@@ -13,6 +15,7 @@ export function SessionDetailView({
   onBack,
   onExport,
   onCompare,
+  onGenerateReport,
 }: SessionDetailViewProps) {
   const [tab, setTab] = useState<"summary" | "readings">("summary");
 
@@ -28,19 +31,8 @@ export function SessionDetailView({
         >
           ← Back to History
         </button>
-        <div className="space-x-2">
-          <button
-            className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded"
-            onClick={() => onExport("csv")}
-          >
-            Export CSV
-          </button>
-          <button
-            className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded"
-            onClick={() => onExport("json")}
-          >
-            Export JSON
-          </button>
+        <div className="space-x-2 flex items-center">
+          <ExportMenu onExport={onExport} onGenerateReport={onGenerateReport} />
           <button
             className="px-3 py-1.5 text-sm bg-blue-700 hover:bg-blue-600 rounded"
             onClick={onCompare}
