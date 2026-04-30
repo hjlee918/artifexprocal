@@ -120,6 +120,7 @@ fn test_autocal_flow_create_and_advance() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);
@@ -145,6 +146,7 @@ fn test_autocal_flow_golden_path() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config.clone());

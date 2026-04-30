@@ -28,6 +28,7 @@ fn mock_session_detail(name: &str) -> SessionDetail {
             settle_time_ms: 5000,
             stability_threshold: None,
             tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
         },
         readings: vec![
             PatchReading {

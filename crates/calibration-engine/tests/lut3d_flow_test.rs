@@ -12,6 +12,7 @@ fn test_config(tier: CalibrationTier) -> SessionConfig {
         settle_time_ms: 10,
         stability_threshold: None,
         tier,
+        manual_patches: None,
     }
 }
 

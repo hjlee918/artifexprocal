@@ -212,6 +212,108 @@ pub fn emit_profiling_complete(
     }
 }
 
+pub fn emit_manual_patch_displayed(
+    app: &AppHandle,
+    session_id: String,
+    patch_index: usize,
+    patch_name: String,
+    rgb: (f64, f64, f64),
+) {
+    if let Err(e) = app.emit(
+        "manual-patch-displayed",
+        serde_json::json!({
+            "session_id": session_id,
+            "patch_index": patch_index,
+            "patch_name": patch_name,
+            "rgb": rgb,
+        }),
+    ) {
+        eprintln!("Failed to emit manual-patch-displayed: {}", e);
+    }
+}
+
+pub fn emit_manual_patch_measured(
+    app: &AppHandle,
+    session_id: String,
+    patch_index: usize,
+    patch_name: String,
+    target_rgb: (f64, f64, f64),
+    measured_xyz: (f64, f64, f64),
+    delta_e: f64,
+) {
+    if let Err(e) = app.emit(
+        "manual-patch-measured",
+        serde_json::json!({
+            "session_id": session_id,
+            "patch_index": patch_index,
+            "patch_name": patch_name,
+            "target_rgb": target_rgb,
+            "measured_xyz": measured_xyz,
+            "delta_e": delta_e,
+        }),
+    ) {
+        eprintln!("Failed to emit manual-patch-measured: {}", e);
+    }
+}
+
+pub fn emit_manual_patch_skipped(
+    app: &AppHandle,
+    session_id: String,
+    patch_index: usize,
+    patch_name: String,
+) {
+    if let Err(e) = app.emit(
+        "manual-patch-skipped",
+        serde_json::json!({
+            "session_id": session_id,
+            "patch_index": patch_index,
+            "patch_name": patch_name,
+        }),
+    ) {
+        eprintln!("Failed to emit manual-patch-skipped: {}", e);
+    }
+}
+
+pub fn emit_manual_state_changed(
+    app: &AppHandle,
+    session_id: String,
+    state: String,
+    current_patch: usize,
+    total_patches: usize,
+) {
+    if let Err(e) = app.emit(
+        "manual-state-changed",
+        serde_json::json!({
+            "session_id": session_id,
+            "state": state,
+            "current_patch": current_patch,
+            "total_patches": total_patches,
+        }),
+    ) {
+        eprintln!("Failed to emit manual-state-changed: {}", e);
+    }
+}
+
+pub fn emit_manual_calibration_complete(
+    app: &AppHandle,
+    session_id: String,
+    measured_patches: usize,
+    skipped_patches: usize,
+    lut_generated: bool,
+) {
+    if let Err(e) = app.emit(
+        "manual-calibration-complete",
+        serde_json::json!({
+            "session_id": session_id,
+            "measured_patches": measured_patches,
+            "skipped_patches": skipped_patches,
+            "lut_generated": lut_generated,
+        }),
+    ) {
+        eprintln!("Failed to emit manual-calibration-complete: {}", e);
+    }
+}
+
 pub fn emit_engine_event(
     app: &AppHandle,
     session_id: &str,
@@ -306,6 +408,52 @@ pub fn emit_engine_event(
                 session_id.to_string(),
                 correction_matrix,
                 accuracy_estimate,
+            );
+        }
+        CalibrationEvent::ManualPatchDisplayed { patch_index, patch_name, rgb } => {
+            emit_manual_patch_displayed(
+                app,
+                session_id.to_string(),
+                patch_index,
+                patch_name,
+                (rgb.r, rgb.g, rgb.b),
+            );
+        }
+        CalibrationEvent::ManualPatchMeasured { patch_index, patch_name, target_rgb, measured_xyz, delta_e } => {
+            emit_manual_patch_measured(
+                app,
+                session_id.to_string(),
+                patch_index,
+                patch_name,
+                (target_rgb.r, target_rgb.g, target_rgb.b),
+                (measured_xyz.x, measured_xyz.y, measured_xyz.z),
+                delta_e,
+            );
+        }
+        CalibrationEvent::ManualPatchSkipped { patch_index, patch_name } => {
+            emit_manual_patch_skipped(
+                app,
+                session_id.to_string(),
+                patch_index,
+                patch_name,
+            );
+        }
+        CalibrationEvent::ManualStateChanged { state, current_patch, total_patches } => {
+            emit_manual_state_changed(
+                app,
+                session_id.to_string(),
+                state,
+                current_patch,
+                total_patches,
+            );
+        }
+        CalibrationEvent::ManualCalibrationComplete { session_id: sid, measured_patches, skipped_patches, lut_generated } => {
+            emit_manual_calibration_complete(
+                app,
+                sid,
+                measured_patches,
+                skipped_patches,
+                lut_generated,
             );
         }
         CalibrationEvent::Error(e) => {

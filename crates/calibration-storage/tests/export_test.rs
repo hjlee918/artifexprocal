@@ -28,6 +28,7 @@ fn make_test_detail() -> SessionDetail {
             settle_time_ms: 0,
             stability_threshold: None,
             tier: CalibrationTier::Full3D,
+            manual_patches: None,
         },
         readings: vec![
             PatchReading {

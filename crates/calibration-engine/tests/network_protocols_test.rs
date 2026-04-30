@@ -49,6 +49,7 @@ fn test_calibration_engine_with_mock_network_devices() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);

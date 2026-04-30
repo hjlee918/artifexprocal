@@ -17,6 +17,7 @@ fn test_create_and_get_session() {
         settle_time_ms: 500,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let id = store.create(&config).unwrap();
@@ -40,6 +41,7 @@ fn test_update_session_state() {
         settle_time_ms: 500,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let id = store.create(&config).unwrap();

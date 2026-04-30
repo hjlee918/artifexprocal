@@ -45,6 +45,8 @@ pub struct SessionConfig {
     pub settle_time_ms: u64,
     pub stability_threshold: Option<f64>,
     pub tier: CalibrationTier,
+    #[serde(default)]
+    pub manual_patches: Option<Vec<RGB>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,6 +86,33 @@ pub enum CalibrationEvent {
     ProfilingComplete {
         correction_matrix: [[f64; 3]; 3],
         accuracy_estimate: f64,
+    },
+    ManualPatchDisplayed {
+        patch_index: usize,
+        patch_name: String,
+        rgb: RGB,
+    },
+    ManualPatchMeasured {
+        patch_index: usize,
+        patch_name: String,
+        target_rgb: RGB,
+        measured_xyz: XYZ,
+        delta_e: f64,
+    },
+    ManualPatchSkipped {
+        patch_index: usize,
+        patch_name: String,
+    },
+    ManualStateChanged {
+        state: String,
+        current_patch: usize,
+        total_patches: usize,
+    },
+    ManualCalibrationComplete {
+        session_id: String,
+        measured_patches: usize,
+        skipped_patches: usize,
+        lut_generated: bool,
     },
 }
 

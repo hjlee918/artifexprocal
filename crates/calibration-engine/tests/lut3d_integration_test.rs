@@ -133,6 +133,7 @@ fn lut3d_flow_grayscale_only_completes() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let mut flow = Lut3DAutoCalFlow::new(config);
@@ -227,6 +228,7 @@ fn lut3d_flow_full3d_completes() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::Full3D,
+            manual_patches: None,
     };
 
     let mut flow = Lut3DAutoCalFlow::new(config);
@@ -287,6 +289,7 @@ fn lut3d_flow_full3d_alpha7_downsamples_to_17() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::Full3D,
+            manual_patches: None,
     };
 
     let mut flow = Lut3DAutoCalFlow::new(config);

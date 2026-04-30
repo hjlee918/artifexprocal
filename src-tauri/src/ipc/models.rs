@@ -199,3 +199,44 @@ pub struct ReportResponseDto {
     pub path: String,
     pub format: reporting::types::ReportFormat,
 }
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ManualConfigDto {
+    pub name: String,
+    pub target_space: String,
+    pub tone_curve: String,
+    pub white_point: String,
+    pub patch_set: String,
+    pub custom_patches: Option<Vec<(f64, f64, f64)>>,
+    pub reads_per_patch: usize,
+    pub settle_time_ms: u64,
+    pub stability_threshold: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ManualMeasurementResultDto {
+    pub patch_index: usize,
+    pub target_rgb: (f64, f64, f64),
+    pub measured_xyz: (f64, f64, f64),
+    pub delta_e: f64,
+    pub patch_name: String,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ManualPatchDto {
+    pub patch_index: usize,
+    pub patch_type: String,
+    pub target_rgb: (f64, f64, f64),
+    pub measured_xyz: Option<(f64, f64, f64)>,
+    pub delta_e: Option<f64>,
+    pub skipped: bool,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]
+pub struct ManualSessionStateDto {
+    pub session_id: String,
+    pub state: String,
+    pub current_patch: usize,
+    pub total_patches: usize,
+    pub patches: Vec<ManualPatchDto>,
+}

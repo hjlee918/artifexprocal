@@ -144,6 +144,7 @@ pub fn start_calibration(
             "Full3D" => calibration_core::state::CalibrationTier::Full3D,
             _ => calibration_core::state::CalibrationTier::GrayscaleOnly,
         },
+        manual_patches: None,
     };
 
     let session_id = service
@@ -239,6 +240,146 @@ pub fn export_profiling_ccmx(
     .map_err(|e| format!("Export failed: {e}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn start_manual_calibration(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+    config: crate::ipc::models::ManualConfigDto,
+) -> Result<String, String> {
+    let session_config = calibration_core::state::SessionConfig {
+        name: config.name,
+        target_space: match config.target_space.as_str() {
+            "Rec.2020" => calibration_core::state::TargetSpace::Bt2020,
+            "DCI-P3" => calibration_core::state::TargetSpace::DciP3,
+            "Rec.709" => calibration_core::state::TargetSpace::Bt709,
+            _ => return Err(format!("Invalid target_space: {}", config.target_space)),
+        },
+        tone_curve: match config.tone_curve.as_str() {
+            "Gamma 2.2" => calibration_core::state::ToneCurve::Gamma(2.2),
+            "Gamma 2.4" => calibration_core::state::ToneCurve::Gamma(2.4),
+            "BT.1886" => calibration_core::state::ToneCurve::Bt1886,
+            "PQ" => calibration_core::state::ToneCurve::Pq,
+            "HLG" => calibration_core::state::ToneCurve::Hlg,
+            _ => return Err(format!("Invalid tone_curve: {}", config.tone_curve)),
+        },
+        white_point: match config.white_point.as_str() {
+            "D50" => calibration_core::state::WhitePoint::D50,
+            "DCI" => calibration_core::state::WhitePoint::Dci,
+            "D65" => calibration_core::state::WhitePoint::D65,
+            _ => return Err(format!("Invalid white_point: {}", config.white_point)),
+        },
+        patch_count: 0,
+        reads_per_patch: config.reads_per_patch,
+        settle_time_ms: config.settle_time_ms,
+        stability_threshold: config.stability_threshold,
+        tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
+        manual_patches: config.custom_patches.map(|patches| {
+            patches.into_iter().map(|(r, g, b)| color_science::types::RGB { r, g, b }).collect()
+        }),
+    };
+
+    service
+        .start_manual_calibration(app, session_config)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn measure_manual_patch(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+    session_id: String,
+) -> Result<crate::ipc::models::ManualMeasurementResultDto, String> {
+    let (patch_index, target_rgb, measured_xyz, delta_e) = service
+        .measure_manual_patch(app, session_id)
+        .map_err(|e| e.to_string())?;
+
+    Ok(crate::ipc::models::ManualMeasurementResultDto {
+        patch_index,
+        target_rgb: (target_rgb.r, target_rgb.g, target_rgb.b),
+        measured_xyz: (measured_xyz.x, measured_xyz.y, measured_xyz.z),
+        delta_e,
+        patch_name: format!("Patch {}", patch_index + 1),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn next_manual_patch(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+) -> Result<usize, String> {
+    service.next_manual_patch(app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn prev_manual_patch(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+) -> Result<usize, String> {
+    service.prev_manual_patch(app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn skip_manual_patch(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+) -> Result<usize, String> {
+    service.skip_manual_patch(app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn finish_manual_calibration(
+    app: AppHandle,
+    service: State<'_, CalibrationService>,
+    apply_corrections: bool,
+) -> Result<(), String> {
+    service
+        .finish_manual_calibration(app, apply_corrections)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn abort_manual_calibration(
+    service: State<'_, CalibrationService>,
+) -> Result<(), String> {
+    service.abort_manual_calibration();
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_manual_calibration_state(
+    service: State<'_, CalibrationService>,
+) -> Option<crate::ipc::models::ManualSessionStateDto> {
+    let guard = service.active_manual_flow.lock();
+    let flow = guard.as_ref()?;
+
+    let patches: Vec<crate::ipc::models::ManualPatchDto> = flow.patches.iter().enumerate().map(|(i, p)| {
+        crate::ipc::models::ManualPatchDto {
+            patch_index: i,
+            patch_type: p.patch_type.clone(),
+            target_rgb: (p.target_rgb.r, p.target_rgb.g, p.target_rgb.b),
+            measured_xyz: p.measured_xyz.map(|xyz| (xyz.x, xyz.y, xyz.z)),
+            delta_e: p.delta_e,
+            skipped: p.skipped,
+        }
+    }).collect();
+
+    Some(crate::ipc::models::ManualSessionStateDto {
+        session_id: flow.session_id.clone(),
+        state: format!("{:?}", flow.state),
+        current_patch: flow.current_patch,
+        total_patches: flow.patches.len(),
+        patches,
+    })
 }
 
 #[tauri::command]

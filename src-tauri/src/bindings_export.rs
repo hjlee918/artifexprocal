@@ -18,6 +18,14 @@ export const {
 	startProfiling,
 	abortProfiling,
 	exportProfilingCcmx,
+	startManualCalibration,
+	measureManualPatch,
+	nextManualPatch,
+	prevManualPatch,
+	skipManualPatch,
+	finishManualCalibration,
+	abortManualCalibration,
+	getManualCalibrationState,
 	getSpectralLocus,
 	getTargetGamut,
 	generate3dLut,
@@ -41,6 +49,11 @@ export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
 export const EVENT_LUT3D_GENERATED = "lut3d-generated" as const;
 export const EVENT_LUT3D_DATA = "lut3d-data" as const;
 export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
+export const EVENT_MANUAL_PATCH_DISPLAYED = "manual-patch-displayed" as const;
+export const EVENT_MANUAL_PATCH_MEASURED = "manual-patch-measured" as const;
+export const EVENT_MANUAL_PATCH_SKIPPED = "manual-patch-skipped" as const;
+export const EVENT_MANUAL_STATE_CHANGED = "manual-state-changed" as const;
+export const EVENT_MANUAL_CALIBRATION_COMPLETE = "manual-calibration-complete" as const;
 
 export type EventName =
 	| typeof EVENT_DEVICE_STATUS_CHANGED
@@ -53,7 +66,12 @@ export type EventName =
 	| typeof EVENT_PROFILING_PROGRESS
 	| typeof EVENT_PROFILING_COMPLETE
 	| typeof EVENT_LUT3D_GENERATED
-	| typeof EVENT_LUT3D_DATA;
+	| typeof EVENT_LUT3D_DATA
+	| typeof EVENT_MANUAL_PATCH_DISPLAYED
+	| typeof EVENT_MANUAL_PATCH_MEASURED
+	| typeof EVENT_MANUAL_PATCH_SKIPPED
+	| typeof EVENT_MANUAL_STATE_CHANGED
+	| typeof EVENT_MANUAL_CALIBRATION_COMPLETE;
 "#;
 
     #[test]
@@ -74,6 +92,14 @@ export type EventName =
                 crate::ipc::commands::start_profiling,
                 crate::ipc::commands::abort_profiling,
                 crate::ipc::commands::export_profiling_ccmx,
+                crate::ipc::commands::start_manual_calibration,
+                crate::ipc::commands::measure_manual_patch,
+                crate::ipc::commands::next_manual_patch,
+                crate::ipc::commands::prev_manual_patch,
+                crate::ipc::commands::skip_manual_patch,
+                crate::ipc::commands::finish_manual_calibration,
+                crate::ipc::commands::abort_manual_calibration,
+                crate::ipc::commands::get_manual_calibration_state,
                 crate::ipc::commands::get_spectral_locus,
                 crate::ipc::commands::get_target_gamut,
                 crate::ipc::commands::generate_3d_lut,

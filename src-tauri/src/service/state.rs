@@ -28,6 +28,7 @@ pub struct CalibrationService {
     active_session: Arc<Mutex<Option<CalibrationSession>>>,
     storage: Arc<Mutex<Storage>>,
     abort_flag: Arc<AtomicBool>,
+    pub(crate) active_manual_flow: Arc<Mutex<Option<calibration_engine::manual_flow::ManualCalibrationFlow>>>,
 }
 
 impl Default for CalibrationService {
@@ -56,6 +57,7 @@ impl CalibrationService {
             active_session: Arc::new(Mutex::new(None)),
             storage: Arc::new(Mutex::new(storage)),
             abort_flag: Arc::new(AtomicBool::new(false)),
+            active_manual_flow: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -592,4 +594,181 @@ impl CalibrationService {
         let query = calibration_storage::query::SessionQuery::new(&storage.conn);
         query.get_detail(session_id).map_err(|e| e.to_string())
     }
+
+    pub fn start_manual_calibration(
+        &self,
+        app: AppHandle,
+        config: SessionConfig,
+    ) -> Result<String, CalibrationError> {
+        let session_id = format!("manual-{}", uuid::Uuid::new_v4());
+
+        {
+            let guard = self.meter.lock();
+            if guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "meter".into() });
+            }
+        }
+        {
+            let guard = self.display.lock();
+            if guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "display".into() });
+            }
+        }
+        {
+            let guard = self.pattern_gen.lock();
+            if guard.is_none() {
+                drop(guard);
+                self.connect_pattern_generator()?;
+            }
+        }
+
+        let mut flow = calibration_engine::manual_flow::ManualCalibrationFlow::new(config, session_id.clone());
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        {
+            let mut meter_guard = self.meter.lock();
+            let mut display_guard = self.display.lock();
+            let mut pg_guard = self.pattern_gen.lock();
+
+            let meter = &mut **meter_guard.as_mut().unwrap();
+            let display = &mut **display_guard.as_mut().unwrap();
+            let pattern_gen = &mut **pg_guard.as_mut().unwrap();
+
+            flow.start(meter, display, pattern_gen, &events)
+                .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+        }
+
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        *self.active_manual_flow.lock() = Some(flow);
+        Ok(session_id)
+    }
+
+    pub fn measure_manual_patch(
+        &self,
+        app: AppHandle,
+        _session_id: String,
+    ) -> Result<(usize, RGB, XYZ, f64), CalibrationError> {
+        let mut flow_guard = self.active_manual_flow.lock();
+        let flow = flow_guard.as_mut().ok_or(CalibrationError::SessionNotFound("No active manual calibration".into()))?;
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        {
+            let mut meter_guard = self.meter.lock();
+            let mut pg_guard = self.pattern_gen.lock();
+
+            let meter = &mut **meter_guard.as_mut().unwrap();
+            let pattern_gen = &mut **pg_guard.as_mut().unwrap();
+
+            flow.measure_current(meter, pattern_gen, &events)
+                .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+        }
+
+        let session_id = flow.session_id.clone();
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        let patch = &flow.patches[flow.current_patch];
+        let measured = patch.measured_xyz.ok_or(CalibrationError::Internal("No measurement".into()))?;
+        let de = patch.delta_e.ok_or(CalibrationError::Internal("No dE computed".into()))?;
+
+        Ok((flow.current_patch, patch.target_rgb, measured, de))
+    }
+
+    pub fn next_manual_patch(&self, app: AppHandle) -> Result<usize, CalibrationError> {
+        let mut flow_guard = self.active_manual_flow.lock();
+        let flow = flow_guard.as_mut().ok_or(CalibrationError::SessionNotFound("No active manual calibration".into()))?;
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        flow.next(&events).map_err(|e| CalibrationError::Internal(e.to_string()))?;
+
+        let session_id = flow.session_id.clone();
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        Ok(flow.current_patch)
+    }
+
+    pub fn prev_manual_patch(&self, app: AppHandle) -> Result<usize, CalibrationError> {
+        let mut flow_guard = self.active_manual_flow.lock();
+        let flow = flow_guard.as_mut().ok_or(CalibrationError::SessionNotFound("No active manual calibration".into()))?;
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        flow.prev(&events).map_err(|e| CalibrationError::Internal(e.to_string()))?;
+
+        let session_id = flow.session_id.clone();
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        Ok(flow.current_patch)
+    }
+
+    pub fn skip_manual_patch(&self, app: AppHandle) -> Result<usize, CalibrationError> {
+        let mut flow_guard = self.active_manual_flow.lock();
+        let flow = flow_guard.as_mut().ok_or(CalibrationError::SessionNotFound("No active manual calibration".into()))?;
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        flow.skip(&events).map_err(|e| CalibrationError::Internal(e.to_string()))?;
+
+        let session_id = flow.session_id.clone();
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        Ok(flow.current_patch)
+    }
+
+    pub fn finish_manual_calibration(
+        &self,
+        app: AppHandle,
+        apply_corrections: bool,
+    ) -> Result<(), CalibrationError> {
+        let mut flow_guard = self.active_manual_flow.lock();
+        let flow = flow_guard.as_mut().ok_or(CalibrationError::SessionNotFound("No active manual calibration".into()))?;
+
+        let events = calibration_engine::events::EventChannel::new(64);
+        let mut rx = events.subscribe();
+
+        {
+            let mut display_guard = self.display.lock();
+            let display = &mut **display_guard.as_mut().unwrap();
+
+            flow.finish(display, &events, apply_corrections)
+                .map_err(|e| CalibrationError::Internal(e.to_string()))?;
+        }
+
+        let session_id = flow.session_id.clone();
+        drop(events);
+        while let Ok(event) = rx.blocking_recv() {
+            crate::ipc::events::emit_engine_event(&app, &session_id, event);
+        }
+
+        *self.active_manual_flow.lock() = None;
+        Ok(())
+    }
+
+    pub fn abort_manual_calibration(&self) {
+        *self.active_manual_flow.lock() = None;
+    }
+
 }

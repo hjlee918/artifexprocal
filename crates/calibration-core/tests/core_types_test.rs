@@ -12,6 +12,7 @@ fn test_session_config_creation() {
         settle_time_ms: 500,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
     assert_eq!(config.patch_count, 21);
     assert_eq!(config.reads_per_patch, 3);

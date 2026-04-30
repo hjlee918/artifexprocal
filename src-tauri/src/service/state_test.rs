@@ -103,6 +103,7 @@ mod tests {
             settle_time_ms: 1000,
             stability_threshold: None,
             tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
         }
     }
 

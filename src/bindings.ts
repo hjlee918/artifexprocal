@@ -17,6 +17,20 @@ export const commands = {
 	startProfiling: (meterId: string, referenceMeterId: string, displayId: string, config: ProfilingConfig) => __TAURI_INVOKE<string>("start_profiling", { meterId, referenceMeterId, displayId, config }),
 	abortProfiling: (sessionId: string) => __TAURI_INVOKE<null>("abort_profiling", { sessionId }),
 	exportProfilingCcmx: (sessionId: string, path: string) => __TAURI_INVOKE<null>("export_profiling_ccmx", { sessionId, path }),
+	startManualCalibration: (config: ManualConfigDto) => __TAURI_INVOKE<string>("start_manual_calibration", { config }),
+	measureManualPatch: (sessionId: string) => __TAURI_INVOKE<ManualMeasurementResultDto>("measure_manual_patch", { sessionId }),
+	nextManualPatch: () => __TAURI_INVOKE<number>("next_manual_patch"),
+	prevManualPatch: () => __TAURI_INVOKE<number>("prev_manual_patch"),
+	skipManualPatch: () => __TAURI_INVOKE<number>("skip_manual_patch"),
+	finishManualCalibration: (applyCorrections: boolean) => __TAURI_INVOKE<null>("finish_manual_calibration", { applyCorrections }),
+	abortManualCalibration: () => __TAURI_INVOKE<null>("abort_manual_calibration"),
+	getManualCalibrationState: () => __TAURI_INVOKE<{
+	session_id: string,
+	state: string,
+	current_patch: number,
+	total_patches: number,
+	patches: ManualPatchDto[],
+} | null>("get_manual_calibration_state"),
 	getSpectralLocus: (diagram: string) => __TAURI_INVOKE<([number, number])[]>("get_spectral_locus", { diagram }),
 	getTargetGamut: (targetSpace: string) => __TAURI_INVOKE<GamutDto>("get_target_gamut", { targetSpace }),
 	generate3dLut: (sessionId: string) => __TAURI_INVOKE<Lut3DInfoDto>("generate_3d_lut", { sessionId }),
@@ -77,6 +91,43 @@ export type Lut3DInfoDto = {
 	size: number,
 	format: string,
 	file_path: string | null,
+};
+
+export type ManualConfigDto = {
+	name: string,
+	target_space: string,
+	tone_curve: string,
+	white_point: string,
+	patch_set: string,
+	custom_patches: ([number, number, number])[] | null,
+	reads_per_patch: number,
+	settle_time_ms: number,
+	stability_threshold: number | null,
+};
+
+export type ManualMeasurementResultDto = {
+	patch_index: number,
+	target_rgb: [number, number, number],
+	measured_xyz: [number, number, number],
+	delta_e: number,
+	patch_name: string,
+};
+
+export type ManualPatchDto = {
+	patch_index: number,
+	patch_type: string,
+	target_rgb: [number, number, number],
+	measured_xyz: [number, number, number] | null,
+	delta_e: number | null,
+	skipped: boolean,
+};
+
+export type ManualSessionStateDto = {
+	session_id: string,
+	state: string,
+	current_patch: number,
+	total_patches: number,
+	patches: ManualPatchDto[],
 };
 
 export type MeterInfo = {
@@ -180,6 +231,14 @@ export const {
 	startProfiling,
 	abortProfiling,
 	exportProfilingCcmx,
+	startManualCalibration,
+	measureManualPatch,
+	nextManualPatch,
+	prevManualPatch,
+	skipManualPatch,
+	finishManualCalibration,
+	abortManualCalibration,
+	getManualCalibrationState,
 	getSpectralLocus,
 	getTargetGamut,
 	generate3dLut,
@@ -203,6 +262,11 @@ export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
 export const EVENT_LUT3D_GENERATED = "lut3d-generated" as const;
 export const EVENT_LUT3D_DATA = "lut3d-data" as const;
 export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
+export const EVENT_MANUAL_PATCH_DISPLAYED = "manual-patch-displayed" as const;
+export const EVENT_MANUAL_PATCH_MEASURED = "manual-patch-measured" as const;
+export const EVENT_MANUAL_PATCH_SKIPPED = "manual-patch-skipped" as const;
+export const EVENT_MANUAL_STATE_CHANGED = "manual-state-changed" as const;
+export const EVENT_MANUAL_CALIBRATION_COMPLETE = "manual-calibration-complete" as const;
 
 export type EventName =
 	| typeof EVENT_DEVICE_STATUS_CHANGED
@@ -215,4 +279,9 @@ export type EventName =
 	| typeof EVENT_PROFILING_PROGRESS
 	| typeof EVENT_PROFILING_COMPLETE
 	| typeof EVENT_LUT3D_GENERATED
-	| typeof EVENT_LUT3D_DATA;
+	| typeof EVENT_LUT3D_DATA
+	| typeof EVENT_MANUAL_PATCH_DISPLAYED
+	| typeof EVENT_MANUAL_PATCH_MEASURED
+	| typeof EVENT_MANUAL_PATCH_SKIPPED
+	| typeof EVENT_MANUAL_STATE_CHANGED
+	| typeof EVENT_MANUAL_CALIBRATION_COMPLETE;

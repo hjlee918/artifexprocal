@@ -20,6 +20,7 @@ fn test_save_and_load_readings() {
         settle_time_ms: 500,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let session_id = session_store.create(&config).unwrap();

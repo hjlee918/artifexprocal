@@ -21,6 +21,7 @@ mod tests {
             settle_time_ms: 10,
             stability_threshold: None,
             tier: calibration_core::state::CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
         };
         let session_id = service.start_calibration_session(config).unwrap();
 

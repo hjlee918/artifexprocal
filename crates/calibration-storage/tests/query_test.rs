@@ -17,6 +17,7 @@ fn make_config(name: &str, target: TargetSpace) -> SessionConfig {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     }
 }
 
@@ -131,6 +132,7 @@ fn test_get_detail_returns_readings() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let id = store.create(&config).unwrap();

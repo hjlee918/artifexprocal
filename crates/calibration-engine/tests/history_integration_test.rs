@@ -129,6 +129,7 @@ fn history_full_flow_list_detail_export() {
         settle_time_ms: 0,
         stability_threshold: None,
         tier: CalibrationTier::GrayscaleOnly,
+            manual_patches: None,
     };
 
     let mut flow = GreyscaleAutoCalFlow::new(config);
