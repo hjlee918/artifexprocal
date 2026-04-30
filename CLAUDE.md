@@ -12,6 +12,36 @@ ArtifexProCal is a **professional-grade display calibration software suite** com
 
 ---
 
+## AUTHORITATIVE DESIGN DOCUMENTS
+
+The following documents define the binding architecture and design contracts for this project. They must be read before any work begins and must not be deviated from without explicit user approval.
+
+@docs/architecture/v2-architecture.md
+@docs/modules/meter-module.md
+@docs/LESSONS_LEARNED.md
+@docs/LG_LUT_FORMAT.md
+
+## Session Startup Protocol
+
+At the start of every session, read CLAUDE.md and all AUTHORITATIVE DESIGN DOCUMENTS referenced above. Confirm in your first response which documents you have loaded. Do not begin work until these have been read.
+
+## Design Conflict Resolution
+
+If during implementation you discover that a design document is wrong or incomplete:
+1. STOP. Do not silently fix it in code.
+2. Document the conflict.
+3. Propose an update to the design document.
+4. Ask the user to approve the design change.
+5. Only then proceed with implementation.
+
+Code is downstream of design. Design is the source of truth.
+
+## Module Work Protocol
+
+Before writing code that touches any module, re-read that module's design document. If the proposed code conflicts with the design document, surface the conflict — do not silently deviate.
+
+---
+
 ## Lessons from v1 (Critical — Do Not Repeat)
 
 See `docs/LESSONS_LEARNED.md` for the full retrospective. Key rules:
