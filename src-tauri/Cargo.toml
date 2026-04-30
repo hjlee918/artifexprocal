@@ -18,18 +18,3 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-color-science = { path = "../crates/color-science" }
-thiserror = "2"
-parking_lot = "0.12"
-specta = "=2.0.0-rc.24"
-tauri-specta = { version = "=2.0.0-rc.24", features = ["typescript", "javascript"] }
-specta-typescript = "0.0.11"
-hal = { path = "../crates/hal" }
-hal_meters = { path = "../crates/hal_meters" }
-hal-displays = { path = "../crates/hal-displays" }
-calibration-core = { path = "../crates/calibration-core" }
-calibration-engine = { path = "../crates/calibration-engine" }
-calibration-autocal = { path = "../crates/calibration-autocal" }
-calibration-storage = { path = "../crates/calibration-storage" }
-reporting = { path = "../crates/reporting" }
-uuid = { version = "1", features = ["v4"] }
