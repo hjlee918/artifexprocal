@@ -4,17 +4,24 @@ import { CalibrationWizard } from "../calibrate/CalibrationWizard";
 import { DeviceSelectionStep } from "../calibrate/DeviceSelectionStep";
 import { TargetConfigStep } from "../calibrate/TargetConfigStep";
 import { MeasurementStep } from "../calibrate/MeasurementStep";
+import { ManualCalibrationStep } from "../calibrate/ManualCalibrationStep";
 import { AnalysisStep } from "../calibrate/AnalysisStep";
 import { UploadStep } from "../calibrate/UploadStep";
 import { VerifyStep } from "../calibrate/VerifyStep";
 import type { WizardState, PatchReading, VerificationResult } from "../calibrate/types";
-import { startCalibration, EVENT_ANALYSIS_COMPLETE, EVENT_LUT3D_DATA } from "../../bindings";
+import {
+  startCalibration,
+  EVENT_ANALYSIS_COMPLETE,
+  EVENT_LUT3D_DATA,
+} from "../../bindings";
 
 export function CalibrateView() {
   const [state, setState] = useState<WizardState>({
     step: "devices",
+    mode: "autocal",
     sessionId: null,
     config: null,
+    manualConfig: null,
     readings: [],
     analysis: null,
     verification: null,
@@ -23,18 +30,33 @@ export function CalibrateView() {
     profilingAccuracy: null,
   });
 
-  const handleDeviceNext = async (profileFirst: boolean) => {
+  const handleDeviceNext = async (mode: import("../calibrate/types").CalibrationMode, profileFirst: boolean) => {
     if (profileFirst) {
-      setState((s) => ({ ...s, step: "profiling" }));
+      setState((s) => ({ ...s, mode, step: "profiling" }));
       return;
     }
-    setState((s) => ({ ...s, step: "target" }));
+    setState((s) => ({ ...s, mode, step: "target" }));
   };
 
   const handleStartMeasurement = async (config: import("../../bindings").SessionConfigDto) => {
     try {
-      const sessionId = await startCalibration(config);
-      setState((s) => ({ ...s, step: "measure", sessionId, config }));
+      if (state.mode === "manual") {
+        const manualConfig: import("../../bindings").ManualConfigDto = {
+          name: config.name,
+          target_space: config.target_space,
+          tone_curve: config.tone_curve,
+          white_point: config.white_point,
+          patch_set: "grayscale",
+          custom_patches: null,
+          reads_per_patch: config.reads_per_patch,
+          settle_time_ms: config.settle_time_ms,
+          stability_threshold: config.stability_threshold,
+        };
+        setState((s) => ({ ...s, step: "measure", sessionId: null, config, manualConfig }));
+      } else {
+        const sessionId = await startCalibration(config);
+        setState((s) => ({ ...s, step: "measure", sessionId, config }));
+      }
     } catch (e) {
       console.error("Failed to start calibration:", e);
     }
@@ -123,11 +145,18 @@ export function CalibrateView() {
         {state.step === "target" && (
           <TargetConfigStep onStart={handleStartMeasurement} />
         )}
-        {state.step === "measure" && state.sessionId && (
+        {state.step === "measure" && state.mode === "autocal" && state.sessionId && (
           <MeasurementStep
             sessionId={state.sessionId}
             totalPatches={state.config?.patch_count ?? 21}
             onComplete={handleMeasurementComplete}
+          />
+        )}
+        {state.step === "measure" && state.mode === "manual" && state.manualConfig && (
+          <ManualCalibrationStep
+            config={state.manualConfig}
+            onComplete={() => setState((s) => ({ ...s, step: "analyze" }))}
+            onAbort={() => setState((s) => ({ ...s, step: "devices" }))}
           />
         )}
         {state.step === "analyze" && state.analysis && (

@@ -1,14 +1,16 @@
 import { useDashboardStore } from "../../store/useDashboardStore";
-import { Plug, Monitor, Layers } from "lucide-react";
+import { Plug, Monitor, Layers, Gauge, Hand } from "lucide-react";
 import { useState } from "react";
+import type { CalibrationMode } from "./types";
 
 export function DeviceSelectionStep({
   onNext,
 }: {
-  onNext: (profileFirst: boolean) => void;
+  onNext: (mode: CalibrationMode, profileFirst: boolean) => void;
 }) {
   const meterStatus = useDashboardStore((s) => s.meterStatus);
   const displayStatus = useDashboardStore((s) => s.displayStatus);
+  const [mode, setMode] = useState<CalibrationMode>("autocal");
   const [profileFirst, setProfileFirst] = useState(false);
 
   const allConnected = meterStatus?.connected && displayStatus?.connected;
@@ -43,6 +45,26 @@ export function DeviceSelectionStep({
         <ChecklistItem label="HDR blank video playing (for HDR mode)" checked={false} optional />
       </div>
 
+      <div className="bg-surface-200 border border-gray-800 rounded-lg p-4 space-y-3">
+        <div className="text-sm font-medium">Calibration Mode</div>
+        <div className="grid grid-cols-2 gap-3">
+          <ModeCard
+            icon={<Gauge size={18} />}
+            label="AutoCal"
+            description="Automated grayscale + 3D LUT"
+            selected={mode === "autocal"}
+            onClick={() => setMode("autocal")}
+          />
+          <ModeCard
+            icon={<Hand size={18} />}
+            label="Manual"
+            description="User-driven patch-by-patch"
+            selected={mode === "manual"}
+            onClick={() => setMode("manual")}
+          />
+        </div>
+      </div>
+
       <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
         <input
           type="checkbox"
@@ -55,7 +77,7 @@ export function DeviceSelectionStep({
 
       <div className="flex justify-end">
         <button
-          onClick={() => onNext(profileFirst)}
+          onClick={() => onNext(mode, profileFirst)}
           disabled={!allConnected}
           className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-sky-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -108,5 +130,34 @@ function ChecklistItem({
       <span className={checked ? "text-gray-300" : "text-gray-500"}>{label}</span>
       {optional && <span className="text-xs text-gray-600">(optional)</span>}
     </div>
+  );
+}
+
+function ModeCard({
+  icon,
+  label,
+  description,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition text-left ${
+        selected
+          ? "bg-primary/10 border-primary text-white"
+          : "bg-surface border-gray-800 text-gray-400 hover:border-gray-700"
+      }`}
+    >
+      <div className={selected ? "text-primary" : "text-gray-500"}>{icon}</div>
+      <div className="text-sm font-medium">{label}</div>
+      <div className="text-xs text-gray-500">{description}</div>
+    </button>
   );
 }

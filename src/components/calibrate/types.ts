@@ -1,3 +1,5 @@
+export type CalibrationMode = "autocal" | "manual" | "profiling";
+
 export type WizardStep =
   | "devices"
   | "profiling"
@@ -34,8 +36,10 @@ export interface Lut3DData {
 
 export interface WizardState {
   step: WizardStep;
+  mode: CalibrationMode;
   sessionId: string | null;
   config: import("../../bindings").SessionConfigDto | null;
+  manualConfig: import("../../bindings").ManualConfigDto | null;
   readings: PatchReading[];
   analysis: AnalysisResult | null;
   verification: VerificationResult | null;
