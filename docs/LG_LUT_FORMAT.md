@@ -19,7 +19,7 @@ LG OLEDs accept calibration data via:
   "payload": {
     "data": "<base64-encoded-binary>",
     "picMode": "expert1",
-    "colorSpace": "bt709"   // optional for 3D LUT
+    "colorSpace": "bt709"
   }
 }
 ```
@@ -28,11 +28,13 @@ The `data` field is a **base64-encoded binary blob**, not JSON. The blob's inter
 
 ### Chip Differences
 
-| Chip | 1D LUT | 3D LUT |
-|------|--------|--------|
-| Alpha 9 Gen 1–3 (B9/C9) | 1024 entries | 17×17×17 |
-| Alpha 9 Gen 4+ (C1/C2/C3/G2/G3) | 1024 entries | 33×33×33 |
-| Alpha 7 (A1/B1) | 1024 entries | 17×17×17 |
+| Chip | Models | 1D LUT | 3D LUT |
+|------|--------|--------|--------|
+| Alpha 9 Gen 1 (B8) | 2018 | 1024 entries | 17×17×17 |
+| Alpha 9 Gen 2+ (C9, CX, C1, C2, C3, G2, G3...) | 2019+ | 1024 entries | 33×33×33 |
+| Alpha 7 (A1, B1, A2) | Various | 1024 entries | 17×17×17 |
+
+**Correction from v1 notes:** The C9 uses Alpha 9 Gen 2 and supports **33×33×33** for 3D LUT — not 17×17×17 as previously noted. The 17-point grid applies only to Alpha 9 Gen 1 (B8) and Alpha 7 models. All Alpha 9 Gen 2 and later models use the 33-point grid.
 
 1D LUT is always 1024 entries × 3 channels (R, G, B).
 
@@ -140,7 +142,8 @@ From user testing with CalMAN and real LG OLEDs:
    - Upload does NOT change white balance (that uses separate `setWhiteBalance` command)
 
 2. **3D LUT upload** (BT.709):
-   - 33×33×33 × 3 channels on Alpha 9 Gen 4+
+   - 33×33×33 × 3 channels on Alpha 9 Gen 2+ (C9 and later)
+   - 17×17×17 × 3 channels on Alpha 9 Gen 1 (B8) and Alpha 7
    - Upload changes color gamut tracking
    - TV requires reboot or mode switch to fully apply
 
@@ -191,6 +194,6 @@ pub trait DisplayController {
 But the **encoding** of `Lut1D` and `Lut3D` into the LG binary format must be:
 - Extracted from real reference code
 - Unit-tested against captured payloads
-- Versioned per chip/firmware (Alpha 9 Gen 4 may differ from Gen 3)
+- Versioned per chip/firmware (Alpha 9 Gen 2+ may differ from Gen 1)
 
 **Do not implement LG LUT upload in v2 until this document is marked COMPLETE.**
