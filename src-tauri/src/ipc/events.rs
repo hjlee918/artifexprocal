@@ -278,6 +278,36 @@ pub fn emit_engine_event(
         CalibrationEvent::SessionComplete { .. } => {
             emit_verification_complete(app, session_id.to_string(), vec![], vec![]);
         }
+        CalibrationEvent::ProfilingProgress {
+            patch_index,
+            total_patches,
+            patch_name,
+            reference_xyz,
+            meter_xyz,
+            delta_e,
+        } => {
+            emit_profiling_progress(
+                app,
+                session_id.to_string(),
+                patch_index,
+                total_patches,
+                patch_name,
+                (reference_xyz.x, reference_xyz.y, reference_xyz.z),
+                (meter_xyz.x, meter_xyz.y, meter_xyz.z),
+                delta_e,
+            );
+        }
+        CalibrationEvent::ProfilingComplete {
+            correction_matrix,
+            accuracy_estimate,
+        } => {
+            emit_profiling_complete(
+                app,
+                session_id.to_string(),
+                correction_matrix,
+                accuracy_estimate,
+            );
+        }
         CalibrationEvent::Error(e) => {
             emit_error_occurred(app, "error".into(), e.to_string(), "engine".into());
         }

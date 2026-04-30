@@ -11,6 +11,7 @@ calibration-core = { path = "../calibration-core" }
 calibration-storage = { path = "../calibration-storage" }
 calibration-autocal = { path = "../calibration-autocal" }
 hal = { path = "../hal" }
+hal_meters = { path = "../hal_meters" }
 color-science = { path = "../color-science" }
 tokio = { version = "1", features = ["sync", "rt"] }
 uuid = { version = "1", features = ["v4"] }

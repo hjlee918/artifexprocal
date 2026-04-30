@@ -73,6 +73,18 @@ pub enum CalibrationEvent {
     CorrectionsUploaded,
     SessionComplete { session_id: String },
     Error(CalibrationError),
+    ProfilingProgress {
+        patch_index: usize,
+        total_patches: usize,
+        patch_name: String,
+        reference_xyz: XYZ,
+        meter_xyz: XYZ,
+        delta_e: f64,
+    },
+    ProfilingComplete {
+        correction_matrix: [[f64; 3]; 3],
+        accuracy_estimate: f64,
+    },
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]

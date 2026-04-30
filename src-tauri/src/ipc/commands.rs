@@ -5,7 +5,6 @@ use crate::ipc::models::{
     SessionSummaryDto, ComputedResultsDto, PatchReadingDto,
 };
 use crate::service::CalibrationService;
-use std::time::Duration;
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -175,37 +174,38 @@ pub fn abort_calibration(
 #[specta::specta]
 pub fn start_profiling(
     app: AppHandle,
-    _service: State<'_, CalibrationService>,
-    _meter_id: String,
-    _reference_meter_id: String,
+    service: State<'_, CalibrationService>,
+    meter_id: String,
+    reference_meter_id: String,
     _display_id: String,
     _config: crate::ipc::models::ProfilingConfig,
 ) -> Result<String, String> {
     let session_id = format!("prof-{}", uuid::Uuid::new_v4());
-    let app_clone = app.clone();
-    let session_id_clone = session_id.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(1));
-        crate::ipc::events::emit_profiling_progress(
-            &app_clone,
-            session_id_clone,
-            0,
-            20,
-            "Primary Red".to_string(),
-            (45.2, 25.1, 12.3),
-            (44.8, 24.9, 12.1),
-            0.35,
-        );
-    });
+
+    // Ensure primary (field) meter is connected
+    if !service.is_meter_connected(&meter_id) {
+        service.connect_meter(&meter_id).map_err(|e| e.to_string())?;
+    }
+
+    // Ensure reference meter is connected
+    if !service.is_reference_meter_connected(&reference_meter_id) {
+        service.connect_reference_meter(&reference_meter_id).map_err(|e| e.to_string())?;
+    }
+
+    service
+        .run_profiling(app, session_id.clone())
+        .map_err(|e| e.to_string())?;
+
     Ok(session_id)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn abort_profiling(
-    _service: State<'_, CalibrationService>,
+    service: State<'_, CalibrationService>,
     _session_id: String,
 ) -> Result<(), String> {
+    service.request_abort();
     Ok(())
 }
 

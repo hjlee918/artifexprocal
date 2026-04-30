@@ -18,6 +18,8 @@ struct CalibrationSession {
 pub struct CalibrationService {
     meter: Arc<Mutex<Option<Box<dyn Meter + Send>>>>,
     meter_info: Arc<Mutex<Option<MeterInfo>>>,
+    reference_meter: Arc<Mutex<Option<Box<dyn Meter + Send>>>>,
+    reference_meter_info: Arc<Mutex<Option<MeterInfo>>>,
     display: Arc<Mutex<Option<Box<dyn DisplayController + Send>>>>,
     display_info: Arc<Mutex<Option<DisplayInfo>>>,
     pattern_gen: Arc<Mutex<Option<Box<dyn PatternGenerator + Send>>>>,
@@ -44,6 +46,8 @@ impl CalibrationService {
         Self {
             meter: Arc::new(Mutex::new(None)),
             meter_info: Arc::new(Mutex::new(None)),
+            reference_meter: Arc::new(Mutex::new(None)),
+            reference_meter_info: Arc::new(Mutex::new(None)),
             display: Arc::new(Mutex::new(None)),
             display_info: Arc::new(Mutex::new(None)),
             pattern_gen: Arc::new(Mutex::new(None)),
@@ -154,6 +158,83 @@ impl CalibrationService {
         match self.meter_info.lock().as_ref() {
             Some(info) => vec![info.clone()],
             None => vec![],
+        }
+    }
+
+    pub fn is_meter_connected(&self, meter_id: &str) -> bool {
+        match self.meter_info.lock().as_ref() {
+            Some(info) => info.id == meter_id,
+            None => false,
+        }
+    }
+
+    pub fn connect_reference_meter(&self, meter_id: &str) -> Result<MeterInfo, CalibrationError> {
+        let known_meters: Vec<(&str, &str, Vec<String>)> = vec![
+            (
+                "i1-pro-2",
+                "i1 Pro 2",
+                vec!["emissive".into(), "xyz".into(), "spectrum".into()],
+            ),
+        ];
+
+        let (id, name, caps) = known_meters
+            .into_iter()
+            .find(|(id, _, _)| *id == meter_id)
+            .ok_or_else(|| CalibrationError::MeterNotFound(meter_id.to_string()))?;
+
+        let info = MeterInfo {
+            id: id.to_string(),
+            name: name.to_string(),
+            serial: None,
+            connected: true,
+            capabilities: caps,
+        };
+
+        if self.use_mocks {
+            let mut fake = hal::mocks::FakeMeter::default();
+            let _ = fake.connect();
+            *self.reference_meter.lock() = Some(Box::new(fake));
+        } else {
+            let mut real: Box<dyn Meter + Send> = match meter_id {
+                "i1-pro-2" => Box::new(hal_meters::i1_pro_2::I1Pro2::new()),
+                _ => unreachable!(),
+            };
+            real.connect().map_err(|e| CalibrationError::Internal(e.to_string()))?;
+            *self.reference_meter.lock() = Some(real);
+        }
+
+        *self.reference_meter_info.lock() = Some(info.clone());
+        Ok(info)
+    }
+
+    pub fn disconnect_reference_meter(&self, meter_id: &str) -> Result<(), CalibrationError> {
+        {
+            let guard = self.reference_meter_info.lock();
+            if guard.as_ref().is_none_or(|i| i.id != meter_id) {
+                return Err(CalibrationError::MeterNotFound(meter_id.to_string()));
+            }
+        }
+        let mut guard = self.reference_meter.lock();
+        if let Some(meter) = guard.as_mut() {
+            meter.disconnect();
+        }
+        *guard = None;
+        drop(guard);
+        *self.reference_meter_info.lock() = None;
+        Ok(())
+    }
+
+    pub fn get_reference_meter_info(&self) -> Vec<MeterInfo> {
+        match self.reference_meter_info.lock().as_ref() {
+            Some(info) => vec![info.clone()],
+            None => vec![],
+        }
+    }
+
+    pub fn is_reference_meter_connected(&self, meter_id: &str) -> bool {
+        match self.reference_meter_info.lock().as_ref() {
+            Some(info) => info.id == meter_id,
+            None => false,
         }
     }
 
@@ -384,6 +465,91 @@ impl CalibrationService {
 
             // Clear session
             *active_session_arc.lock() = None;
+            *state_arc.lock() = CalibrationState::Idle;
+        });
+
+        Ok(())
+    }
+
+    pub fn run_profiling(
+        &self,
+        app: AppHandle,
+        session_id: String,
+    ) -> Result<(), CalibrationError> {
+        // Verify both meters are connected
+        {
+            let meter_guard = self.meter.lock();
+            if meter_guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "meter".into() });
+            }
+        }
+        {
+            let ref_guard = self.reference_meter.lock();
+            if ref_guard.is_none() {
+                return Err(CalibrationError::NoHardwareConnected { device: "reference meter".into() });
+            }
+        }
+        {
+            let pg_guard = self.pattern_gen.lock();
+            if pg_guard.is_none() {
+                // Auto-connect pattern generator if not already connected
+                drop(pg_guard);
+                let _ = self.connect_pattern_generator();
+            }
+        }
+
+        self.clear_abort();
+        self.set_state(CalibrationState::Connecting);
+
+        let abort_flag = self.abort_flag.clone();
+        let app_clone = app.clone();
+        let meter_arc = self.meter.clone();
+        let reference_meter_arc = self.reference_meter.clone();
+        let pattern_gen_arc = self.pattern_gen.clone();
+        let state_arc = self.state.clone();
+
+        std::thread::spawn(move || {
+            let events = calibration_engine::events::EventChannel::new(256);
+            let mut rx = events.subscribe();
+
+            // Spawn event bridge
+            let bridge_app = app_clone.clone();
+            let bridge_sid = session_id.clone();
+            std::thread::spawn(move || {
+                while let Ok(event) = rx.blocking_recv() {
+                    crate::ipc::events::emit_engine_event(&bridge_app, &bridge_sid, event);
+                }
+            });
+
+            let mut meter_guard = meter_arc.lock();
+            let mut ref_meter_guard = reference_meter_arc.lock();
+            let mut pg_guard = pattern_gen_arc.lock();
+
+            let meter = &mut **meter_guard.as_mut().unwrap();
+            let ref_meter = &mut **ref_meter_guard.as_mut().unwrap();
+            let pattern_gen = &mut **pg_guard.as_mut().unwrap();
+
+            let config = calibration_engine::profiling_flow::ProfilingConfig::default();
+            let mut flow = calibration_engine::profiling_flow::ProfilingFlow::new(config);
+
+            let result = flow.run_sync(ref_meter, meter, pattern_gen, &events);
+
+            if let Err(e) = result {
+                if abort_flag.load(Ordering::SeqCst) {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "warning".into(), "Profiling aborted".into(), "run_profiling".into()
+                    );
+                } else {
+                    crate::ipc::events::emit_error_occurred(
+                        &app_clone, "error".into(), e.to_string(), "run_profiling".into()
+                    );
+                }
+            }
+
+            if let Some(m) = meter_guard.as_mut() { m.disconnect(); }
+            if let Some(r) = ref_meter_guard.as_mut() { r.disconnect(); }
+            if let Some(p) = pg_guard.as_mut() { p.disconnect(); }
+
             *state_arc.lock() = CalibrationState::Idle;
         });
 
