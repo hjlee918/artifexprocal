@@ -1,12 +1,33 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working on the ArtifexProCal project.
 
 ## Project Overview
 
-This is a **greenfield project** for a professional-grade display calibration software suite competing with CalMAN Ultimate and Light Illusion's ColourSpace INF. The design spec is at `docs/superpowers/specs/2026-04-24-calibration-software-design.md`.
+ArtifexProCal is a **professional-grade display calibration software suite** competing with CalMAN Ultimate and Light Illusion's ColourSpace INF. The design spec is at `docs/superpowers/specs/2026-04-24-calibration-software-design.md`.
 
-**Planned tech stack:** Tauri (Rust backend + React/TypeScript frontend). The project has not been scaffolded yet — there is no build system, no `package.json`, no `Cargo.toml`.
+**Tech stack:** Tauri 2.x (Rust backend + React/TypeScript frontend). The project is currently on the `clean-slate` branch — all v1 code is archived at `archive/v1/`.
+
+**Current status:** v1 has been archived. v2 rebuild is in early design phase. The build infrastructure (`package.json`, `Cargo.toml`, `vite.config.ts`, `tauri.conf.json`) is intact; application code is minimal placeholder.
+
+---
+
+## Lessons from v1 (Critical — Do Not Repeat)
+
+See `docs/LESSONS_LEARNED.md` for the full retrospective. Key rules:
+
+1. **Store hydrates on mount** — Zustand (or any frontend store) must fetch backend state on component mount. Never assume events have already fired.
+2. **IPC handlers are thin delegators** — Under 100 lines each. Business logic lives in focused engine crates, not `CalibrationService`.
+3. **Bindings auto-generated** — `tauri-specta` generates TypeScript bindings on every `cargo build`. Hand-maintained `bindings.ts` is forbidden.
+4. **State machine before UI** — Define the wizard/session state machine first. Every step receives the same state object and emits the same action enum.
+5. **No Three.js until real data flows** — Start with SVG/Canvas for 2D diagrams. Three.js is Phase 5+.
+6. **No `blocking_recv` in UI-facing code** — Use async events with timeouts and explicit termination conditions.
+7. **Pattern generator is a first-class device** — Must be discoverable, connectable, and visible in the device list. No implicit auto-connect.
+8. **Every phase ships end-to-end** — Each phase must produce a working, testable increment. No integration-only phases.
+9. **Correction matrix is HAL concern** — Applied at the `Meter` trait level, not duplicated across calibration flows.
+10. **Hardware drivers need self-test** — Every driver must have a `probe()` method for connectivity verification.
+
+---
 
 ## Domain Context
 
@@ -31,12 +52,16 @@ The user owns and will use for development/testing:
 ### LG AutoCal Protocol
 LG OLEDs from 2018+ support calibration over the local network via an HTTP API. The TV displays a passcode for pairing. The software uploads 1D LUTs, 3D LUTs, and white balance settings directly. This is the primary calibration path for the MVP.
 
+**Known limitation:** The exact binary format for LG LUT upload (`setExternalPqData`) is **not fully reverse-engineered**. See `docs/LG_LUT_FORMAT.md` for the research status. Do not implement LG LUT upload until this is resolved.
+
 ### Supported File Formats (planned)
 - LUTs: `.cube`, `.3dl`, `.xml` (Dolby Vision), `.dat` (madVR)
 - Profiles: `.icc`/`.icm`, `.ccmx`, `.ccss`
 - Data: `.csv`, `.json`
 
-## Architecture (planned)
+---
+
+## Architecture (planned — v2)
 
 ### Backend (Rust)
 Modular crate structure:
@@ -48,13 +73,15 @@ Modular crate structure:
 - `calibration` — Session manager, patch sequencer, measurement loop, AutoCal logic, 1D/3D LUT generation
 - `profiling` — Display characterization, meter correction matrix generation
 - `reporting` — PDF/HTML report generation
-- `ipc` — Tauri command/event handlers
+- `ipc` — Tauri command/event handlers (thin layer)
 
 ### Frontend (React + TypeScript)
-- **Visualization:** Three.js/WebGL for CIE diagrams and 3D LUT cubes
+- **Visualization:** SVG/Canvas for CIE diagrams and gamma curves; Three.js/WebGL deferred until Phase 5+
 - **Wizards:** Step-by-step calibration flows (AutoCal, Manual, 3D LUT, Profiling)
 - **Dashboard:** Session history, device inventory, quick actions
-- **State:** Zustand for global state, React Query for backend sync
+- **State:** Zustand for UI state; backend state is fetched explicitly, not assumed from events
+
+---
 
 ## User Preferences
 
@@ -68,36 +95,54 @@ Modular crate structure:
 - **Offline-first:** Entirely offline, no account validation
 - **Measurement mode:** Fast default with optional high-precision iterative mode
 
+---
+
+## Meter Driver Architecture (Critical for HAL)
+
+### i1 Display Pro Rev.B
+
+**macOS:** Uses ArgyllCMS `spotread -c 1` via PTY-based subprocess adapter (`argyll_adapter.rs`). Native HID works for unlock but subsequent commands hit IOKit write timeout — ArgyllCMS fallback is required.
+
+**Linux/Windows:** Native HID via `hidapi` + challenge-response unlock protocol (`i1d3_unlock.rs`). 11 known OEM keys exist. `I1D3_ESCAPE` env var for unknown variants. Unlock protocol proven correct on physical hardware.
+
+**ArgyllCMS dependency:** Cannot bundle due to AGPL. Must prompt user to install (`brew install argyll-cms`). Only required on macOS.
+
+### i1 Pro 2
+
+**macOS:** Uses ArgyllCMS `spotread -c 2`. Cannot do native USB due to `IOUSBHost` driver conflict.
+
+**Linux/Windows:** Native USB bulk transfer via `rusb`.
+
+### Routing Rule
+
+| Platform | i1 Display Pro | i1 Pro 2 |
+|----------|---------------|----------|
+| macOS | ArgyllCMS | ArgyllCMS |
+| Linux | Native HID | Native USB |
+| Windows | Native HID | Native USB |
+
+---
+
 ## Repository
 
 - **GitHub:** https://github.com/hjlee918/artifexprocal.git
 - **Remote name:** `origin`
 - **Push on every change:** The user wants all progress committed and pushed immediately
+- **Active branch:** `clean-slate` (do not merge to `main` until v2 is functional)
 
-## When Scaffolding
+---
 
-When this project gets initialized:
-1. Use `npm create tauri-app@latest` or `cargo create-tauri-app` to scaffold
-2. The Rust workspace should use a single `Cargo.toml` with multiple crates (not a monorepo of separate packages)
-3. Frontend should be React 19 + TypeScript + Tailwind CSS + Vite
-4. Add Three.js for visualization
-5. SQLite via `rusqlite` or `sqlx` for the Rust backend
-6. Prefer Rust crates for color science over calling into Python (`colour-science` is Python-only)
+## Document Generation
 
-## LG OLED Development Resources
+**Always produce both `.md` and `.docx` formats.**
 
-These are essential references for understanding the LG webOS internals, network control protocols, and how to communicate with the panel directly:
+- `.md` stays in version control for diffs and code review
+- `.docx` is for the user's consumption and reporting
+- `.md` is the single source of truth; `.docx` should be generated from `.md` via a script, not hand-edited
 
-- [openlgtv webOS hacking notes](https://gist.github.com/Informatic/1983f2e501444cf1cbd182e50820d6c1) — Reverse-engineered webOS internals, calibration API endpoints, service commands
-- [bscpylgtv](https://github.com/chros73/bscpylgtv) — Python library for controlling webOS-based LG TVs over the network. Shows the exact websocket/HTTP commands for picture mode switching, calibration data upload, and system service calls
-- [webOS Open Source Edition docs](https://www.webosose.org/docs/home/) — Official webOS OSE documentation for understanding the OS architecture, service APIs, and luna-service bus
-- [ColorControl (Maassoft)](https://github.com/Maassoft/ColorControl) — C# application that controls LG OLEDs and NVIDIA GPUs. Excellent reference for the LG calibration protocol, including 1D/3D LUT upload formats, white balance commands, and HDR tone curve settings
+---
 
-These are the primary references for implementing the `hal_displays` LG OLED module.
-
-## Calibration Procedures and Protocols
-
-### LG OLED Calibration Protocol (SSAP over WebSocket)
+## LG OLED Calibration Protocol (SSAP over WebSocket)
 
 **Transport:** WebSocket connection on port 3000 (plain) or 3001 (secure/wss). Commands sent as cleartext JSON payloads.
 
@@ -150,7 +195,9 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 - Include a `probe()` method that calls the black endpoint to verify connectivity before measurement sessions
 - If the actual API differs (e.g., `/measure` or `/setPatch`), only the PGenerator client implementation needs updating
 
-### Pre-Calibration Procedures
+---
+
+## Pre-Calibration Procedures
 
 **Equipment Warm-up:**
 - TV: Powered on with standard content for minimum 45 minutes (preferably 1 hour)
@@ -177,7 +224,9 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 - Peak luminance: 100 nits (@ 100% White)
 - 109% white: ~124 nits (for Video Extended range with Contrast at default 85)
 
-### Calibration Workflow
+---
+
+## Calibration Workflow
 
 1. **Connect TV** — SSAP WebSocket connection with PIN pairing
 2. **Select picture mode + color space + HDR format**
@@ -188,7 +237,9 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 7. **Upload LUTs** — Upload to TV via calibration API
 8. **Verify** — Measure again to confirm calibration accuracy
 
-### Key Open-Source Libraries for Reference
+---
+
+## Key Open-Source Libraries for Reference
 
 | Language | Library | URL |
 |----------|---------|-----|
@@ -198,10 +249,14 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 | Node.js | lgtv2 | https://github.com/hobbyquaker/lgtv2 |
 | Go | go-webos | https://pkg.go.dev/github.com/kaperys/go-webos |
 
-### Firmware Warnings
+---
+
+## Firmware Warnings
 
 - **webOS 7.3+:** Communication protocol changed and broke existing calibration tools. Do not update to webOS 7.3 if calibration compatibility is required.
 - **Model/Year Differences:** The LG command protocol is inconsistent between models and firmware versions. Commands must be validated per model/year combination.
+
+---
 
 ## Competitors for Reference
 
