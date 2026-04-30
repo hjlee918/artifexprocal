@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SessionSummaryDto, SessionFilterDto, commands } from "../../bindings";
+import { SessionSummaryDto } from "../../bindings";
 
 interface SessionTableProps {
   sessions: SessionSummaryDto[];

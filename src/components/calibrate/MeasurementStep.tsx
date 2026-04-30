@@ -4,7 +4,16 @@ import { LiveGammaChart } from "./LiveGammaChart";
 import { PatchDataTable } from "./PatchDataTable";
 import { YxyReadout } from "./YxyReadout";
 import type { PatchReading } from "./types";
-import { EVENT_CALIBRATION_PROGRESS, type CalibrationProgress } from "../../bindings";
+import { EVENT_CALIBRATION_PROGRESS } from "../../bindings";
+
+interface CalibrationProgress {
+  session_id: string;
+  current_patch: number;
+  total_patches: number;
+  patch_name: string;
+  yxy: [number, number, number] | null;
+  stable: boolean;
+}
 
 export function MeasurementStep({
   sessionId,

@@ -50,7 +50,13 @@ export function AnalysisStep({
     [0.026, 0.003], [0.026, 0.002], [0.026, 0.001],
   ];
 
-  const targetGamut = getTargetGamut(targetSpace ?? "Rec.709");
+  const targetGamutRaw = getTargetGamut(targetSpace ?? "Rec.709");
+  const targetGamut = {
+    red: [targetGamutRaw.red.x, targetGamutRaw.red.y] as [number, number],
+    green: [targetGamutRaw.green.x, targetGamutRaw.green.y] as [number, number],
+    blue: [targetGamutRaw.blue.x, targetGamutRaw.blue.y] as [number, number],
+    white: [targetGamutRaw.white.x, targetGamutRaw.white.y] as [number, number],
+  };
 
   const measuredGamut = {
     red: [0.64, 0.33] as [number, number],

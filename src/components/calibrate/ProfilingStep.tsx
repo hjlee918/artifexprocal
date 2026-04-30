@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { startProfiling } from "../../bindings";
-import { EVENT_PROFILING_PROGRESS, type ProfilingProgress, EVENT_PROFILING_COMPLETE } from "../../bindings";
+import { EVENT_PROFILING_PROGRESS, EVENT_PROFILING_COMPLETE } from "../../bindings";
+
+interface ProfilingProgress {
+  session_id: string;
+  current_patch: number;
+  total_patches: number;
+  patch_name: string;
+  reference_xyz: [number, number, number];
+  meter_xyz: [number, number, number];
+  delta_e: number;
+}
 
 interface ProfilingCompletePayload {
   session_id: string;

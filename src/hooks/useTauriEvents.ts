@@ -4,10 +4,26 @@ import {
   EVENT_DEVICE_STATUS_CHANGED,
   EVENT_CALIBRATION_STATE_CHANGED,
   EVENT_ERROR_OCCURRED,
-  type DeviceStatusEvent,
-  type CalibrationStateEvent,
-  type ErrorEvent,
 } from "../bindings";
+
+interface DeviceStatusEvent {
+  device_id: string;
+  device_type: string;
+  connected: boolean;
+  info: string;
+}
+
+interface CalibrationStateEvent {
+  old_state: string;
+  new_state: string;
+  message: string;
+}
+
+interface ErrorEvent {
+  severity: string;
+  message: string;
+  source: string;
+}
 import { useDashboardStore } from "../store/useDashboardStore";
 
 export function useTauriEvents() {
