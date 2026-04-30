@@ -95,6 +95,13 @@ pub struct MeterModuleConfig {
     pub stabilization_delay_ms: u32,
     pub auto_dark_current: bool,
     pub preferred_driver: DriverPreference, // Native, ArgyllCMS, Auto
+    pub registers: HashMap<RegisterSlot, MeasurementResult>,
+    pub preset: MeterPreset,
+    pub configurable_readouts: Vec<ReadoutField>, // which MeasurementResult fields appear in MeasurementDisplay
+    pub palette_storage_path: String,
+    pub ccss_install_path: String,
+    pub ccmx_install_path: String,
+    pub oem_file_install_path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -107,10 +114,12 @@ pub struct MeterConfig {
 
 #[derive(Debug, Clone, Copy)]
 pub enum MeasurementMode {
-    Emissive,   // Display direct measurement (default)
-    Ambient,    // Ambient light measurement
-    Flash,      // Flash / projector measurement
-    Telephoto,  // Measurement through lens
+    Emissive,     // Display direct measurement (default)
+    Ambient,      // Ambient light measurement
+    Flash,        // Flash / projector measurement
+    Telephoto,    // Measurement through lens
+    Reflective,   // Reflective surface measurement (print, paper, textiles)
+    Transmissive, // Transmissive measurement (film, backlit displays, filters)
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +272,105 @@ pub struct GetConfigRequest {
 pub struct ProbeRequest {
     pub instrument_id: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SetRegisterRequest {
+    pub meter_id: String,
+    pub register_slot: RegisterSlot,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClearRegisterRequest {
+    pub meter_id: String,
+    pub register_slot: RegisterSlot,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SwapRegistersRequest {
+    pub meter_id: String,
+    pub slot_a: RegisterSlot,
+    pub slot_b: RegisterSlot,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RenameRegisterRequest {
+    pub meter_id: String,
+    pub register_slot: RegisterSlot,
+    pub new_label: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum RegisterSlot {
+    Current, Reference, W, K, R, G, B, C, M, Y,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MatchNamedColorRequest {
+    pub meter_id: String,
+    pub palette_id: Option<String>, // None = search all palettes
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportPaletteRequest {
+    pub file_path: String,
+    pub format: PaletteFormat, // Cxf, Icc
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum PaletteFormat {
+    Cxf,
+    Icc,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetPresetRequest {
+    pub meter_id: String,
+    pub preset: MeterPreset,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum MeterPreset {
+    Printing,
+    Photography,
+    Lighting,
+    GraphicDesign,
+    TvVideo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExportMeasurementsRequest {
+    pub meter_id: String,
+    pub file_path: String,
+    pub format: ExportFormat,
+    pub filter: MeasurementFilter,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum ExportFormat {
+    Tsv,
+    Csv,
+    Json,
+    ArgyllSp,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct MeasurementFilter {
+    pub mode: Option<MeasurementMode>,
+    pub instrument_id: Option<String>,
+    pub date_from: Option<DateTime<Utc>>,
+    pub date_to: Option<DateTime<Utc>>,
+    pub register: Option<RegisterSlot>,
+    pub session_id: Option<String>,
+    pub search_text: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetTpgPatchRequest {
+    pub meter_id: String,
+    pub patch_rgb: Rgb<u16>,
+    pub colorspace: RgbSpace,
+}
 ```
 
 ### 2.5 Detection and USB Enumeration
@@ -327,8 +435,14 @@ pub enum MeterCapability {
     EmissiveMeasurement,
     AmbientMeasurement,
     FlashMeasurement,
+    ReflectiveMeasurement,
+    TransmissiveMeasurement,
     SpectralData,       // provides full spectrum, not just XYZ
     HighLuminance,      // >2000 nits (HDR-capable)
+    DensityMeasurement, // Status A/M/T/E, ISO Type 1/2, Visual
+    LuxMeasurement,     // incident illuminance (photography mode)
+    RefreshRateDetection, // display refresh rate detection
+    UvMeasurement,      // UV index / ARPANSA exposure
 }
 ```
 
@@ -597,6 +711,18 @@ pub struct MeasurementResult {
     /// Derived CIE LCh (Lightness, Chroma, Hue)
     pub lch: LCh,
 
+    /// Derived CIE Yu'v' (uniform chromaticity scale)
+    pub yuv_uv_prime: Option<XyY>,
+
+    /// Derived CIE L*u*v* (CIELUV)
+    pub luv: Option<Lab>,
+
+    /// Derived CIE L*C*h*uv (polar form of CIELUV)
+    pub lchuv: Option<LCh>,
+
+    /// Derived DIN99 Lab (perceptually uniform alternative to CIELAB)
+    pub din99_lab: Option<Lab>,
+
     /// ICtCp perceptual color difference space (for HDR)
     pub ictcp: Option<ICtCp>,
 
@@ -606,6 +732,12 @@ pub struct MeasurementResult {
     /// Spectral wavelengths corresponding to `spectrum` (nm)
     pub spectrum_wavelengths: Option<Vec<f64>>,
 
+    /// CIE standard observer used for tristimulus calculation from spectrum
+    pub observer_type: Option<ObserverType>,
+
+    /// Selected illuminant for reflective/transmissive calculations
+    pub illuminant_selection: Option<IlluminantSelection>,
+
     // --- Color Temperature & Quality ---
     /// Correlated Color Temperature (Kelvin)
     pub cct: Option<f64>,
@@ -613,8 +745,20 @@ pub struct MeasurementResult {
     /// Distance from Planckian locus (Duv)
     pub duv: Option<f64>,
 
-    /// Color Rendering Index (if spectrum available)
-    pub cri: Option<f64>,
+    /// Delta CCT vs. reference register (K)
+    pub delta_cct: Option<f64>,
+
+    /// Black Body or Daylight locus mode used for CCT calculation
+    pub locus_mode: Option<LocusMode>,
+
+    /// CCT calculation method (Correlated or DE2000)
+    pub cct_method: Option<CctMethod>,
+
+    /// Color temperature in Mired (1,000,000 / CCT)
+    pub mired: Option<f64>,
+
+    /// Color rendering metrics (if spectrum available)
+    pub color_rendering: Option<ColorRendering>,
 
     // --- Target and error metrics ---
     /// Target color (the intended RGB or xyY of the displayed patch)
@@ -632,6 +776,18 @@ pub struct MeasurementResult {
     /// DeltaE 1994
     pub delta_e_94: Option<f64>,
 
+    /// DeltaE 1994 Textile variant
+    pub delta_e_94_textile: Option<f64>,
+
+    /// DeltaE CMC 2:1 (acceptability)
+    pub delta_e_cmc_2_1: Option<f64>,
+
+    /// DeltaE CMC 1:1 (perceptibility)
+    pub delta_e_cmc_1_1: Option<f64>,
+
+    /// DeltaE DIN99
+    pub delta_e_din99: Option<f64>,
+
     // --- Instrument metadata ---
     /// Integration time in milliseconds
     pub integration_time_ms: Option<u32>,
@@ -645,9 +801,45 @@ pub struct MeasurementResult {
     /// Correction matrix applied (if any)
     pub correction_matrix_applied: Option<String>, // matrix ID or name
 
+    /// Density measurements (only in Reflective / Transmissive mode)
+    pub density: Option<DensityValues>,
+
+    /// Incident illuminance in lux (photography / lighting mode)
+    pub illuminance_lux: Option<f64>,
+
+    /// Reflected luminance in cd/m² (explicit photography field)
+    pub reflected_luminance: Option<f64>,
+
+    /// Exposure Value (EV) calculated from illuminance / luminance
+    pub ev: Option<f64>,
+
+    /// Visual contrast ratio (luminance_current / luminance_reference)
+    pub visual_contrast_ratio: Option<f64>,
+
+    /// UV index calculated from spectral data (ARPANSA method)
+    pub uv_index: Option<f64>,
+
+    /// Detected display refresh rate in Hz (if instrument supports it)
+    pub detected_refresh_rate_hz: Option<f64>,
+
     // --- Patch context ---
     /// The RGB stimulus that was displayed (8-bit or 10-bit, depending on generator)
     pub patch_rgb: Rgb<u16>,
+
+    /// Colorspace tag for the RGB stimulus (BT.709, BT.2020, DCI-P3, custom)
+    pub colorspace_tag: Option<RgbSpace>,
+
+    /// BT.1886 EOTF response value for the current patch (normalized 0–1)
+    pub bt1886_response: Option<f64>,
+
+    /// Delta RGB (measured vs. target per-channel difference)
+    pub delta_rgb: Option<Rgb<f64>>,
+
+    /// Which RGB channel(s) need adjustment to reach target (per-channel direction)
+    pub adjustment_direction_rgb: Option<Rgb<AdjustmentDirection>>,
+
+    /// Which CMY channel(s) need adjustment (inverse of RGB for display calibration)
+    pub adjustment_direction_cmy: Option<Rgb<AdjustmentDirection>>,
 
     /// Which pattern generator produced the patch
     pub pattern_generator_id: Option<String>,
@@ -670,10 +862,268 @@ pub struct MeasurementResult {
 }
 ```
 
+/// Color rendering metrics derived from spectral data.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct ColorRendering {
+    /// CIE 1995 General Color Rendering Index (Ra)
+    pub cri_ra: f64,
+    /// CIE R9 (saturated red) — reported separately per ArgyllPRO convention
+    pub cri_r9: f64,
+    /// EBU TLCI-2012 Qa (Television Lighting Consistency Index)
+    pub tlci_qa: Option<f64>,
+    /// TM-30-15 metrics (if spectrum available)
+    pub tm_30_15: Option<Tm30Metrics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct Tm30Metrics {
+    /// Fidelity index (Rf)
+    pub rf: f64,
+    /// Gamut index (Rg)
+    pub rg: f64,
+}
+
+/// Standard CIE observers for tristimulus calculation from spectral data.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum ObserverType {
+    Cie1931_2deg,
+    Cie1964_10deg,
+}
+
+/// Standard illuminants for reflective/transmissive calculations.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum IlluminantSelection {
+    D50,
+    D55,
+    D65,
+    D75,
+    A,   // Incandescent
+    E,   // Equal energy
+    Custom { spectrum_id: String },
+}
+
+/// Black body or daylight locus mode for CCT calculation.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum LocusMode {
+    BlackBody,
+    Daylight,
+}
+
+/// CCT calculation method.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum CctMethod {
+    Correlated,
+    De2000,
+}
+
+/// Per-channel adjustment direction for RGB/CMY display calibration guidance.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
+pub enum AdjustmentDirection {
+    Increase,
+    Decrease,
+    Neutral,
+}
+
+/// Density measurement values for print and film workflows.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct DensityValues {
+    /// Visual density (unfiltered)
+    pub visual: f64,
+    /// Status A (offset print, tungsten light)
+    pub status_a: Option<f64>,
+    /// Status M (reflection densitometry)
+    pub status_m: Option<f64>,
+    /// Status T (transmission densitometry, wideband)
+    pub status_t: Option<f64>,
+    /// Status E (DIN narrowband)
+    pub status_e: Option<f64>,
+    /// ISO Type 1 (graphic arts, narrowband)
+    pub iso_type_1: Option<f64>,
+    /// ISO Type 2 (graphic arts, wideband)
+    pub iso_type_2: Option<f64>,
+}
+
 **ArgyllPRO Feature Parity Notes:**
 - ArgyllPRO ColorMeter 2 on Android displays: XYZ, Yxy, Lab, LCh, RGB, DeltaE, CCT, Spectrum (for spectros)
-- Our `MeasurementResult` adds: ICtCp (for HDR), CRI, Duv, and full patch/session context for calibration workflows
+- Our `MeasurementResult` adds: ICtCp (for HDR), full color rendering struct (CRI Ra+R9, TLCI, TM-30-15), Duv, density, photography fields, and full patch/session context for calibration workflows
 - The `spectral_data` field enables future spectral visualization and CRI calculation without re-measuring
+
+---
+
+## 2.12 Density Measurements
+
+Density measurements are print-workflow specific and only applicable in **Reflective** or **Transmissive** measurement modes. The meter module computes density from the measured luminance (or transmittance) relative to a calibrated white (or clear) reference.
+
+**Supported density types:**
+
+| Type | Filter | Use Case |
+|------|--------|----------|
+| Visual | None (unfiltered) | General-purpose density |
+| Status A | ISO 5-3 A | Offset print, tungsten light |
+| Status M | ISO 5-3 M | Reflection densitometry |
+| Status T | ISO 5-3 T | Transmission densitometry (wideband) |
+| Status E (DIN) | DIN narrowband | European standard |
+| ISO Type 1 | Narrowband | Graphic arts, narrow spectral |
+| ISO Type 2 | Wideband | Graphic arts, wide spectral |
+
+**Workflow:**
+1. User selects Reflective or Transmissive mode.
+2. Meter takes a baseline reading on unprinted paper (or clear film) — stored as the **Reference** register.
+3. Subsequent readings compute `density = -log10(measured / reference)`.
+4. Results populate `MeasurementResult.density`.
+
+**UI:** A `DensityPanel` component appears in `StandaloneMeterView` when a meter supports `DensityMeasurement`. It shows all seven density values in a grid. The baseline-clear button resets the reference.
+
+---
+
+## 2.13 Photography Mode Details
+
+Photography mode provides lighting and exposure metrics used by photographers, cinematographers, and gaffers.
+
+**Fields added to `MeasurementResult`:**
+- `illuminance_lux` — incident illuminance (lux) when meter is in Ambient or Flash mode with cosine diffuser
+- `reflected_luminance` — reflected luminance in cd/m² (explicit field, not derived from XYZ Y)
+- `ev` — Exposure Value calculated from illuminance or luminance using standard photographic equations
+
+**Exposure Value calculation:**
+```
+EV = log2(lux / 2.5)      // for incident light
+EV = log2(luminance * ISO / K)  // for reflected light (K = 12.5 for standard meters)
+```
+
+**Interactive Exposure Calculator (`ExposureCalculator` component):**
+- Inputs: ISO, aperture (f-stop), shutter speed, EV (from meter)
+- Outputs: the missing variable (e.g., given ISO + aperture + EV, compute required shutter speed)
+- Displayed as a card in `StandaloneMeterView` when `MeasurementMode` is Ambient or Flash.
+- Supports bulb mode, fractional stops, and ND filter compensation.
+
+---
+
+## 2.14 Color Library System
+
+The Color Library subsystem allows users to compare measurements against named colors, palettes, and industry standards.
+
+**Features:**
+
+1. **Web RGB Display** — Every `MeasurementResult` computes an sRGB hex value (`#RRGGBB`) for quick visual reference. Displayed in `MeasurementDisplay` as a small color swatch.
+
+2. **Visual Compare Swatches** — Side-by-side swatch comparison of Current measurement vs. Reference register, or vs. a named color from the library.
+
+3. **Named Color Matching** — Find the closest named color to the current measurement using DeltaE 2000. Supports:
+   - CSS / X11 named colors (147 colors)
+   - Pantone (if palette imported)
+   - NCS (Natural Color System, if imported)
+   - User-defined custom named colors
+
+4. **Named Color Visual Swatch (`NamedColorSwatch` component)** — A small card showing the matched named color name, hex value, and DeltaE distance.
+
+5. **Palette Import:**
+   - **CxF (.cxf)** — Color eXchange Format palette import. Parsed in Rust, stored in SQLite `palettes` table.
+   - **ICC / ICM palette (.icc, .icm)** — Extracts named color tags from ICC v4 profiles.
+
+6. **Storage:** Palettes live in `calibration-storage` (`palettes` table). Each palette has a name, source file path, and color rows.
+
+7. **Search / Filter UI (`PaletteBrowser` component):** Search by color name, filter by palette, sort by hue / lightness / chroma.
+
+**IPC additions:**
+- `meter.match_named_color` → returns closest named color + DeltaE
+- `meter.list_palettes` → returns all installed palettes
+- `meter.import_palette` → accepts file path + format, returns palette ID
+
+---
+
+## 2.15 Measurement Registers
+
+Registers are persistent named measurement slots that enable comparison, reference tracking, and multi-point analysis.
+
+**Register slots:**
+
+| Slot | Purpose | Default Label |
+|------|---------|---------------|
+| Current | The most recent measurement | "Current" |
+| Reference | The reference against which DeltaE is computed | "Reference" |
+| W | White point measurement | "White" |
+| K | Black point measurement | "Black" |
+| R | Red primary measurement | "Red" |
+| G | Green primary measurement | "Green" |
+| B | Blue primary measurement | "Blue" |
+| C | Cyan secondary measurement | "Cyan" |
+| M | Magenta secondary measurement | "Magenta" |
+| Y | Yellow secondary measurement | "Yellow" |
+
+**Behavior:**
+- Every new measurement automatically populates the **Current** register.
+- **Reference** drives `DeltaE` calculations in `MeasurementDisplay`. The user can set any register as Reference.
+- Registers can be renamed, cleared, or swapped.
+- All registers are stored in `MeterModuleConfig` and persisted to `SettingsStore`.
+
+**IPC commands:**
+- `meter.set_register` — Store current measurement into a named slot
+- `meter.clear_register` — Remove a stored measurement
+- `meter.swap_registers` — Exchange two register slots
+- `meter.rename_register` — Change the display label of a slot
+- `meter.get_all_registers` — Return all populated registers
+
+**UI (`RegisterManager` component):**
+- Grid of 10 register cards showing color swatch, Lab values, and label.
+- Click to set as Reference, rename, or clear.
+- "Set from Current" button on each empty slot.
+- Displayed in `StandaloneMeterView` as an accordion panel.
+
+---
+
+## 2.16 Specialty Measurements
+
+Specialty measurements cover niche use cases and advanced instrument capabilities.
+
+**Visual Contrast:**
+- Computes luminance ratio between Current and Reference registers: `contrast_ratio = max(L_current, L_reference) / min(L_current, L_reference)`.
+- Displayed as a ratio (e.g., "21:1") and as a percentage.
+- Useful for accessibility compliance (WCAG) and display uniformity checks.
+
+**ARPANSA UV Exposure:**
+- Calculates UV index from spectral data using the ARPANSA erythemal action spectrum weighting.
+- Only available when the instrument returns full spectral data (`spectrum` is `Some`).
+- Displayed in `MeasurementDisplay` as a small UV index badge when applicable.
+
+**Display Refresh Rate Detection:**
+- Some meters (e.g., Klein K-10A) can detect the refresh rate of the display being measured.
+- Populates `MeasurementResult.detected_refresh_rate_hz`.
+- Shown in `MeterHealthIndicator` as an extra status line when available.
+
+---
+
+## 2.17 Chromaticity Display
+
+The Chromaticity Display subsystem renders CIE diagrams with live measurement plotting, reference overlays, and gamut triangles.
+
+**Supported diagrams:**
+- **CIE 1931 xy** — Standard chromaticity diagram
+- **CIE 1976 u'v'** — Uniform chromaticity scale (recommended for small color differences)
+
+**Features:**
+- **Live point plotting** — Current measurement appears as a pulsating dot that updates on every read.
+- **Reference point overlay** — The Reference register is shown as a fixed crosshair.
+- **Register points overlay** — All populated registers (W, K, R, G, B, C, M, Y) are shown as labeled dots.
+- **Gamut triangle overlay** — BT.709, BT.2020, and DCI-P3 triangles can be toggled on/off.
+- **dE vector** — When Current and Reference are both set, an arrow shows the direction and magnitude of the color difference.
+
+**React component: `ChromaticityDiagram`**
+- Rendering: **SVG-based** (per Lesson #5: Three.js is NOT permitted until Phase 5+).
+- Uses pre-computed spectral locus path data for CIE 1931 and 1976.
+- Responsive, zoomable, with axis labels and gridlines.
+- Located in `StandaloneMeterView` as the primary visualization panel.
+
+**Data contract:**
+```typescript
+interface ChromaticityDiagramProps {
+  diagramType: 'cie1931_xy' | 'cie1976_uv';
+  currentPoint: { x: number; y: number } | null;
+  referencePoint: { x: number; y: number } | null;
+  registerPoints: Array<{ label: string; x: number; y: number; color: string }>;
+  showGamutTriangles: boolean[];
+}
+```
 
 ---
 
@@ -693,6 +1143,18 @@ pub struct MeasurementResult {
 | `meter.get_config` | `GetConfigRequest` | `MeterConfig` | Read meter settings |
 | `meter.probe` | `ProbeRequest` | `{ healthy: bool, message?: string }` | Self-test instrument |
 | `meter.list_active` | `{}` | `Vec<ActiveMeterInfo>` | List connected meters |
+| `meter.set_register` | `SetRegisterRequest` | `RegisterState` | Store current measurement into a register slot |
+| `meter.clear_register` | `ClearRegisterRequest` | `()` | Clear a register slot |
+| `meter.swap_registers` | `SwapRegistersRequest` | `()` | Swap two register slots |
+| `meter.rename_register` | `RenameRegisterRequest` | `RegisterState` | Rename a register slot label |
+| `meter.get_all_registers` | `{}` | `Vec<RegisterState>` | Return all populated registers |
+| `meter.match_named_color` | `MatchNamedColorRequest` | `NamedColorMatchResult` | Find closest named color to current measurement |
+| `meter.list_palettes` | `{}` | `Vec<PaletteSummary>` | List installed color palettes |
+| `meter.import_palette` | `ImportPaletteRequest` | `PaletteSummary` | Import a CxF or ICC palette file |
+| `meter.set_preset` | `SetPresetRequest` | `MeterModuleConfig` | Apply a preset configuration |
+| `meter.get_presets` | `{}` | `Vec<PresetSummary>` | List available presets |
+| `meter.export_measurements` | `ExportMeasurementsRequest` | `{ file_path: string, format: string }` | Export filtered measurements (TSV, CSV, JSON, .sp) |
+| `meter.set_tpg_patch` | `SetTpgPatchRequest` | `()` | Send live patch color to pattern generator |
 
 ### 3.2 Events (Backend → Frontend)
 
@@ -704,6 +1166,10 @@ pub struct MeasurementResult {
 | `meter:measurement` | `MeasurementResult` | Single measurement completed (from `read` or continuous stream) |
 | `meter:health` | `MeterHealth` | Periodic health/status update |
 | `meter:error` | `{ meter_id: string, message: string }` | Instrument error |
+| `meter:register_changed` | `RegisterState` | A register slot was updated |
+| `meter:palette_imported` | `PaletteSummary` | A palette was successfully imported |
+| `meter:chromaticity_update` | `ChromaticityPoint` | New point for chromaticity diagram (throttled) |
+| `meter:tpg_patch_set` | `{ r: u8, g: u8, b: u8 }` | Confirmation that pattern generator patch was updated |
 
 ---
 
@@ -744,11 +1210,23 @@ MeterModule (registered in ModuleRegistry)
 │
 └── StandaloneMeterView         # Full-page spot-read mode (no workflow)
     ├── MeterConnectionBar
+    ├── ChromaticityDiagram     # SVG-based CIE 1931 / 1976 live plot
     ├── MeasurementDisplay
+    │   ├── XyzCard
+    │   ├── XyYCard
+    │   ├── LabCard
+    │   ├── DeltaECard (if target provided)
+    │   ├── ColorSwatch         # sRGB hex swatch of current measurement
+    │   ├── NamedColorSwatch    # closest named color match
+    │   ├── DensityPanel        # visible when in Reflective/Transmissive mode
+    │   └── ExposureCalculator  # visible when in Ambient/Flash mode
     ├── MeasurementControls
     ├── MeasurementHistoryTable
+    ├── RegisterManager         # 10-slot register grid
     ├── TargetSelector          # choose target color for DeltaE calculation
-    └── ExportButton            # CSV/JSON export of session readings
+    ├── PaletteBrowser          # search/filter named colors
+    ├── DensityBaselinePanel    # set/clear density reference
+    └── ExportButton            # TSV/CSV/JSON/.sp export of session readings
 ```
 
 ### 4.2 Standalone Meter Mode
@@ -758,8 +1236,13 @@ The `StandaloneMeterView` is the primary UI for Phase 1 (no workflow engine yet)
 - **Device connection:** Detect, connect, disconnect, probe
 - **Spot reads:** Single measurement with real-time display of XYZ, xyY, Lab, LCh, DeltaE
 - **Continuous monitoring:** Streaming reads at configurable intervals
-- **Measurement history:** Scrollable table with export to CSV/JSON
+- **Measurement history:** Scrollable table with export to TSV/CSV/JSON/.sp
 - **Target selection:** Choose a target color to compute DeltaE against
+- **Register management:** 10 named slots (Current, Reference, W, K, R, G, B, C, M, Y) for comparison and reference tracking
+- **Chromaticity display:** SVG-based CIE 1931 xy or 1976 u'v' diagram with live plotting and gamut triangles
+- **Color library:** Named color matching, palette import (CxF / ICC), visual swatch comparison
+- **Density panel:** Print-workflow density values (Visual, Status A/M/T/E, ISO Type 1/2) in Reflective/Transmissive mode
+- **Exposure calculator:** Photography mode with lux, EV, and interactive exposure calculator
 - **Export:** Save measurement history for later analysis
 
 This is the first end-to-end feature that proves the module architecture works.
@@ -795,6 +1278,10 @@ interface MeasurementDisplayProps {
 ```
 
 - Large, high-contrast cards for XYZ, xyY, Lab values
+- Shows sRGB hex `ColorSwatch` for quick visual reference
+- `NamedColorSwatch` displays the closest named color match and DeltaE distance
+- `DensityPanel` appears when `measurement_mode` is Reflective or Transmissive
+- `ExposureCalculator` appears when `measurement_mode` is Ambient or Flash
 - If `target` is provided and `showDeltaE` is true, shows DeltaE 2000 with color-coded severity:
   - < 1.0: Excellent (green)
   - 1.0–3.0: Good (yellow)
@@ -811,7 +1298,75 @@ interface MeasurementHistoryTableProps {
 ```
 
 - Sortable columns: timestamp, XYZ, xyY, Lab, DeltaE, label
-- Export to CSV or JSON
+- Filter by mode, instrument, date range, register, session
+- Search across labels, notes, and session IDs
+- Export to TSV, CSV, JSON, or ArgyllCMS .sp format (bulk or per-measurement)
+
+#### `ChromaticityDiagram`
+
+```typescript
+interface ChromaticityDiagramProps {
+  diagramType: 'cie1931_xy' | 'cie1976_uv';
+  currentPoint: { x: number; y: number } | null;
+  referencePoint: { x: number; y: number } | null;
+  registerPoints: Array<{ label: string; x: number; y: number; color: string }>;
+  showGamutTriangles: boolean[];
+}
+```
+
+- SVG-based rendering (no Three.js per Lesson #5)
+- Live pulsating dot for current measurement
+- Fixed crosshair for Reference register
+- Labeled dots for all populated registers (W, K, R, G, B, C, M, Y)
+- Toggle-able gamut triangles: BT.709, BT.2020, DCI-P3
+- dE vector arrow when Current and Reference are both set
+
+#### `RegisterManager`
+
+```typescript
+interface RegisterManagerProps {
+  registers: RegisterState[];
+  onSetReference: (slot: RegisterSlot) => void;
+  onClear: (slot: RegisterSlot) => void;
+  onSwap: (slotA: RegisterSlot, slotB: RegisterSlot) => void;
+  onRename: (slot: RegisterSlot, label: string) => void;
+  onSetFromCurrent: (slot: RegisterSlot) => void;
+}
+```
+
+- 10-slot grid with color swatch, Lab values, and editable label
+- Click any slot to set it as the Reference register
+- "Set from Current" button on empty slots
+- Accordion panel in `StandaloneMeterView`
+
+#### `DensityPanel`
+
+```typescript
+interface DensityPanelProps {
+  density: DensityValues | null;
+  baselineSet: boolean;
+  onSetBaseline: () => void;
+  onClearBaseline: () => void;
+}
+```
+
+- Grid of 7 density values: Visual, Status A, Status M, Status T, Status E, ISO Type 1, ISO Type 2
+- Baseline reference controls (set/clear)
+- Only visible when meter is in Reflective or Transmissive mode
+
+#### `ExposureCalculator`
+
+```typescript
+interface ExposureCalculatorProps {
+  ev: number | null;
+  iso: number;
+  onIsoChange: (iso: number) => void;
+}
+```
+
+- Interactive solver: given ISO + aperture + EV → shutter speed, or any permutation
+- Supports bulb mode, fractional stops, ND filter compensation
+- Only visible when meter is in Ambient or Flash mode
 
 ### 4.4 State Management
 
@@ -838,15 +1393,34 @@ interface MeterStore {
   startContinuous: (meterId: string, intervalMs: number) => Promise<void>;
   stopContinuous: (meterId: string) => Promise<void>;
 
+  // Registers
+  registers: RegisterState[];
+  setRegister: (slot: RegisterSlot, label?: string) => Promise<void>;
+  clearRegister: (slot: RegisterSlot) => Promise<void>;
+  swapRegisters: (slotA: RegisterSlot, slotB: RegisterSlot) => Promise<void>;
+  renameRegister: (slot: RegisterSlot, label: string) => Promise<void>;
+
+  // Color library
+  palettes: PaletteSummary[];
+  importPalette: (filePath: string, format: PaletteFormat) => Promise<void>;
+  matchNamedColor: (paletteId?: string) => Promise<NamedColorMatchResult | null>;
+
+  // Presets
+  presets: PresetSummary[];
+  applyPreset: (preset: MeterPreset) => Promise<void>;
+
   // Config
   moduleConfig: MeterModuleConfig;
   setModuleConfig: (config: Partial<MeterModuleConfig>) => Promise<void>;
+
+  // Export
+  exportMeasurements: (filePath: string, format: ExportFormat, filter?: MeasurementFilter) => Promise<void>;
 }
 ```
 
 **Hydration:** On mount, the store calls `invoke("module_command", { moduleId: "meter", command: "list_active" })` and `invoke("module_command", { moduleId: "meter", command: "detect" })`.
 
-**Event subscription:** The store subscribes to `meter:connected`, `meter:disconnected`, `meter:measurement`, and `meter:error` via Tauri `listen()`.
+**Event subscription:** The store subscribes to `meter:connected`, `meter:disconnected`, `meter:measurement`, `meter:error`, `meter:register_changed`, `meter:palette_imported`, `meter:chromaticity_update`, and `meter:tpg_patch_set` via Tauri `listen()`.
 
 ---
 
@@ -924,10 +1498,54 @@ Documented in `tests/hardware/meter_probe.rs`:
 | `MeasurementTimeout` | Meter unresponsive | "Measurement timed out. Try increasing integration time." | Increase timeout |
 | `Saturated` | Reading exceeds meter range | "Signal too bright. Use ND filter or reduce display brightness." | Adjust display |
 | `CalibrationRequired` | Meter needs calibration | "Meter requires calibration. Place on calibration tile and retry." | Calibrate meter |
+| `DensityBaselineMissing` | Density computed before baseline set | "Set density baseline on unprinted paper before measuring." | Set baseline |
+| `PaletteImportFailed` | Invalid CxF or ICC file | "Failed to import palette. Check file format and try again." | Re-export palette |
+| `NamedColorMatchFailed` | No palettes installed | "Install a color palette before matching named colors." | Import palette |
+| `ExportFormatUnsupported` | Requested export format not implemented | "Export format not yet supported." | Try TSV or CSV |
+| `RegisterSlotEmpty` | Operation on empty register | "Register slot is empty. Store a measurement first." | Set register |
+| `TpgPatchFailed` | Pattern generator did not acknowledge patch | "Pattern generator did not update. Check connection." | Reconnect TPG |
+| `PresetApplyFailed` | Meter does not support preset capabilities | "Preset requires capabilities this meter does not have." | Choose different preset |
 
 ---
 
-## 8. Open Questions
+## 8. Configuration & Persistence Details
+
+### 8.1 Preset Configurations
+
+Presets configure the MeterModule for common workflows with a single click. Each preset sets measurement mode, enabled readouts, and default filters.
+
+| Preset | Mode | Enabled Readouts | Notes |
+|--------|------|-----------------|-------|
+| **Printing** | Reflective | Density (all), Lab, DeltaE | Status A default density filter |
+| **Photography** | Ambient | Lux, EV, CCT, DeltaE | Enables ExposureCalculator |
+| **Lighting** | Ambient | Lux, CCT, Duv, CRI Ra+R9, TLCI | Full color quality metrics |
+| **Graphic Design** | Emissive | Lab, LCh, DeltaE, RGB swatch | sRGB-focused readouts |
+| **TV & Video** | Emissive | XYZ, xyY, DeltaE 2000, ICtCp, RGB | BT.709/BT.2020 tags enabled |
+
+### 8.2 Configurable Readouts
+
+Users select which `MeasurementResult` fields appear simultaneously in `MeasurementDisplay`. Default readouts per preset are listed above. Custom readout selection is persisted per user.
+
+### 8.3 File Installation Paths
+
+| File Type | Path | Purpose |
+|-----------|------|---------|
+| `.ccss` | `~/.artifexprocal/spectral/ccss/` | Display calibration spectral sample sets |
+| `.ccmx` | `~/.artifexprocal/matrices/ccmx/` | Meter correction matrices |
+| `.oem` | `~/.artifexprocal/instruments/oem/` | OEM instrument support files (unlock keys, firmware) |
+
+**Management UI:** A `FileInstallationPanel` in `MeterSettingsPanel` lists installed files by type, allows import via file picker, and validates file format on upload.
+
+### 8.4 Measurement Logging Details
+
+- **Capacity:** 10,000 measurements (rolling buffer in SQLite, paginated).
+- **Per-measurement metadata:** timestamp, measurement mode, instrument model/serial, location (lat/lng if available), optional photo blob (for print-workflow traceability).
+- **Filter UI:** Filter by mode, instrument, date range, register slot, session ID.
+- **Search UI:** Full-text search across labels, notes, and session IDs.
+
+---
+
+## 9. Open Questions
 
 1. **Multi-meter support:** Should the UI allow two meters connected simultaneously (e.g., spectro for profiling, colorimeter for speed)? Recommendation: yes — `active_meters` is a `Vec`, and the UI shows a tab per meter.
 2. **ArgyllCMS path customization:** Should users specify a custom `spotread` path? Recommendation: yes, via `SettingsStore` key `"meter.argyll_path"`; default is `"spotread"` in PATH.
@@ -936,7 +1554,7 @@ Documented in `tests/hardware/meter_probe.rs`:
 
 ---
 
-## 9. Approval Checklist
+## 10. Approval Checklist
 
 Before implementation begins, confirm:
 - [ ] Instrument list (§1.1) covers all devices the user owns or plans to support
@@ -950,3 +1568,191 @@ Before implementation begins, confirm:
 - [ ] `MeasurementResult` (§2.11) has all fields needed for ArgyllPRO parity
 - [ ] React component tree (§4.1) covers standalone mode + workflow integration
 - [ ] Testing strategy (§6) includes hardware `probe()` tests
+
+---
+
+## 11. Phase Classification Matrix
+
+Every feature in the MeterModule is classified below as **Phase 1** (first release), **Phase 2** (next iteration), or **Deferred** (with reason).
+
+### 10.1 Measurement Modes
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Emissive | **Phase 1** | Core display calibration mode; primary use case. |
+| Ambient | **Phase 1** | Required for photography/lighting workflows; trivial to add via mode enum. |
+| Reflective | **Phase 2** | Print workflow; needs density subsystem and illuminant selection. |
+| Transmissive | **Phase 2** | Film/transparency workflow; same dependencies as Reflective. |
+| Flash | **Phase 2** | Projector/flash photography; needs integration time handling changes. |
+| Telephoto | **Phase 2** | Niche; adds no new data types, just UI labeling. |
+
+### 10.2 Tristimulus Colorspaces
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| CIE XYZ | **Phase 1** | Raw instrument output; essential. |
+| Yxy | **Phase 1** | Derived from XYZ; single line of code. |
+| Lab | **Phase 1** | Industry standard; already in v1 color-science. |
+| LCh (ab) | **Phase 1** | Polar form of Lab; trivial derivation. |
+| Yu'v' | **Phase 2** | Uniform chromaticity; useful but not critical for MVP. |
+| L*u*v* | **Phase 2** | Alternative uniform space; adds no new workflow. |
+| L*C*h*uv | **Phase 2** | Polar LUV; same rationale as L*u*v*. |
+| DIN99 Lab | **Phase 2** | Perceptually uniform alternative; nice-to-have. |
+| ICtCp | **Phase 1** | HDR metric; already planned for BT.2020/PQ workflows. |
+
+### 10.3 Delta E Variants
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| CIE DE2000 | **Phase 1** | Industry standard; primary metric for display calibration. |
+| CIE DE76 | **Phase 1** | Simple euclidean fallback; already in v1. |
+| CIE DE94 | **Phase 2** | Used in some legacy workflows; one function call. |
+| DE94 Textile | **Phase 2** | Niche textile workflow; same formula with different weighting. |
+| CMC 2:1 | **Phase 2** | Print industry acceptability metric; low effort. |
+| CMC 1:1 | **Phase 2** | Print industry perceptibility metric; low effort. |
+| DIN99 DE | **Phase 2** | Only needed if DIN99 Lab is adopted. |
+| DeltaE ITU-R BT.2124 | **Phase 1** | HDR metric; already planned. |
+
+### 10.4 Density Measurements
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Visual density | **Phase 2** | Requires Reflective mode + baseline reference; print workflow. |
+| Status A / M / T / E | **Phase 2** | Filtered density variants; same block as Visual. |
+| ISO Type 1 / 2 | **Phase 2** | Graphic arts density; same block as Visual. |
+
+### 10.5 Photography Mode
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Reflected luminance | **Phase 1** | Already derived from XYZ Y; just adds explicit field. |
+| Incident illuminance (lux) | **Phase 2** | Requires cosine diffuser support; Ambient mode enhancement. |
+| Exposure Value (EV) | **Phase 2** | Simple calculation from lux/luminance; tied to lux field. |
+| Interactive Exposure Calculator | **Deferred** | Complex UI with 3-variable solver; depends on Photography workflow (Phase 3+). |
+
+### 10.6 Color Temperature
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| CCT | **Phase 1** | Essential for white balance evaluation. |
+| Duv | **Phase 1** | Trivial add-on to CCT calculation. |
+| Delta CT | **Phase 2** | Delta vs. reference; requires register system. |
+| Black Body / Daylight locus | **Phase 2** | CCT accuracy improvement; minor math change. |
+| Correlated / DE2000 method | **Phase 2** | Method toggle; low effort. |
+| Kelvin / Mired units | **Phase 2** | Display toggle; trivial conversion. |
+
+### 10.7 RGB / Video
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| BT.709 / BT.2020 / DCI-P3 tags | **Phase 1** | Enum already exists; just add field to MeasurementResult. |
+| Custom RGB space | **Phase 2** | Requires user-defined matrix input. |
+| BT.1886 response | **Phase 2** | EOTF calculation; useful for gamma verification. |
+| Delta RGB | **Phase 2** | Per-channel difference vs. target. |
+| RGB / CMY Adjustment Direction | **Phase 2** | UI guidance arrows; dependent on Delta RGB. |
+
+### 10.8 Color Rendering
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| CRI Ra | **Phase 2** | Requires spectral data; only spectrophotometers provide this. |
+| CRI R9 | **Phase 2** | Same block as Ra; single additional spectral integral. |
+| TLCI Qa | **Deferred** | Requires EBU test spectrum and detailed spectral math; lighting workflow only. |
+| TM-30-15 (Rf, Rg) | **Deferred** | Requires 99-color test sample set and extensive spectral math; lighting workflow only. |
+
+### 10.9 Specialty Measurements
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Visual Contrast | **Phase 2** | Simple ratio of two registers; low effort. |
+| ARPANSA UV Exposure | **Deferred** | Niche; requires UV-weighted spectral integral and safety thresholds. |
+| Display Refresh Rate detection | **Deferred** | Requires instrument support (Klein K-10A); no current hardware in user's lab. |
+
+### 10.10 Color Library
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Web RGB / sRGB hex swatch | **Phase 1** | Trivial XYZ→sRGB conversion; high visual value. |
+| Visual Compare Swatches | **Phase 2** | Side-by-side comparison; requires register system. |
+| Named Color matching (CSS/X11) | **Phase 2** | 147-color lookup table; simple DeltaE search. |
+| Named Color Visual Swatch | **Phase 2** | UI card; tied to named color matching. |
+| CxF palette import | **Phase 2** | XML parsing; useful for Pantone workflows. |
+| ICC palette import | **Phase 2** | ICC tag extraction; similar effort to CxF. |
+
+### 10.11 Spectral Display
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| SPD graph | **Phase 2** | SVG line chart; data already in MeasurementResult. |
+| Observer selection (1931 2° / 1964 10°) | **Phase 2** | Enum exists; affects tristimulus math from spectrum. |
+| Illuminant selection | **Phase 2** | Enum exists; affects reflective/transmissive calculations. |
+
+### 10.12 Chromaticity Display
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| CIE 1931 xy diagram | **Phase 1** | SVG-based; primary visualization for standalone mode. |
+| CIE 1976 u'v' diagram | **Phase 2** | Same SVG engine, different locus path; low effort. |
+| Reference point overlay | **Phase 1** | Essential for DeltaE visualization. |
+| Register points overlay | **Phase 2** | Requires register system. |
+| Gamut triangle overlay | **Phase 1** | Static SVG paths; high educational value. |
+| dE vector arrow | **Phase 2** | SVG line + arrowhead; requires Current + Reference. |
+
+### 10.13 Measurement Registers
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Current register | **Phase 1** | Implicitly exists (latest measurement). |
+| Reference register | **Phase 1** | Drives DeltaE; essential for any comparison workflow. |
+| W (White) register | **Phase 1** | Used for white balance and density baseline. |
+| K, R, G, B, C, M, Y registers | **Phase 2** | Useful for gamut / CMS workflows but not needed for basic spot reads. |
+| Register management UI | **Phase 1** | Reference + W are needed immediately; UI scales to 10 slots. |
+
+### 10.14 Configuration & Persistence
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Save/restore meter configs | **Phase 1** | Already in MeterModuleConfig + SettingsStore. |
+| Save/restore instrument configs | **Phase 1** | Serial-specific settings persisted in DeviceInventory. |
+| Presets (Printing / Photography / Lighting / Graphic Design / TV & Video) | **Phase 2** | Convenient but not blocking; can default to TV & Video. |
+| Configurable readouts | **Phase 2** | UI polish; default readouts cover 90% of use cases. |
+| .ccss / .ccmx / OEM file install | **Phase 2** | File management UI; data paths already defined. |
+
+### 10.15 Measurement Logging
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| 1,000 measurement capacity | **Phase 1** | SQLite-backed; sufficient for initial testing and small sessions. |
+| 10,000 measurement capacity | **Phase 2** | Pagination and indexing; scaling concern, not correctness. |
+| Per-measurement metadata | **Phase 2** | Adds lat/lng and photo blob; not essential for display calibration. |
+| Historical review UI | **Phase 1** | MeasurementHistoryTable already planned. |
+| Filter and search | **Phase 2** | SQL query enhancement; low effort. |
+
+### 10.16 Export Formats
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| TSV export | **Phase 1** | Simple tab-separated format; one-line formatter change from CSV. |
+| CSV export | **Phase 1** | Already planned. |
+| JSON export | **Phase 1** | Already planned. |
+| ArgyllCMS .sp format | **Phase 2** | Requires spectral wavelength header formatting; spectro-only. |
+| Per-measurement export | **Phase 2** | UI selection mode; low effort. |
+| Bulk export | **Phase 1** | MeasurementHistoryTable export already covers this. |
+
+### 10.17 Test Pattern Generator Integration
+
+| Feature | Phase | Reasoning |
+|---------|-------|-----------|
+| Live patch update API (`setPatchColor`) | **Phase 2** | Requires PatternModule to exist; MeterModule can emit event but PatternModule must consume it. |
+| Continuous measurement + live patch sync | **Phase 2** | Depends on live patch update + workflow engine timing. |
+| Six standard test cards | **Deferred** | Display Geometry, Probe Locations, Low/High Clipping, Neutrals, Color Ramps — these are display-diagnostic patterns that require a mature DisplayModule and pattern sequencing engine (Phase 5+). |
+
+### 10.18 Summary by Phase
+
+| Phase | Feature Count | Key Deliverables |
+|-------|--------------|----------------|
+| **Phase 1** | ~35 features | Emissive/Ambient modes, XYZ/xyY/Lab/LCh/ICtCp, DE2000/DE76, CCT/Duv, CIE 1931 xy diagram, Current/Reference/W registers, TSV/CSV/JSON export, 1,000-log capacity, sRGB swatch, standalone spot-read UI |
+| **Phase 2** | ~45 features | Reflective/Transmissive/Flash, remaining colorspaces, all DeltaE variants, density, photography (lux/EV), full register set, named colors, palette import, spectral observer/illuminant, CIE 1976 u'v', presets, configurable readouts, .ccss/.ccmx install, 10,000-log capacity, .sp export, live TPG patch update |
+| **Deferred** | ~6 features | Interactive Exposure Calculator, TLCI, TM-30-15, ARPANSA UV, refresh rate detection, six standard test cards |
+
+**ArgyllPRO Coverage:** 100% of categories are now documented. Every feature is either covered in Phase 1/2 or explicitly Deferred with a documented reason. The Phase 1 minimum delivers a functional, competitive standalone meter application. Phase 2 closes all remaining gaps for professional print, photography, and lighting workflows.
