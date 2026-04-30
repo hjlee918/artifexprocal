@@ -27,6 +27,11 @@ export interface VerificationResult {
   post_de: number[];
 }
 
+export interface Lut3DData {
+  size: number;
+  data: number[];
+}
+
 export interface WizardState {
   step: WizardStep;
   sessionId: string | null;
@@ -34,6 +39,7 @@ export interface WizardState {
   readings: PatchReading[];
   analysis: AnalysisResult | null;
   verification: VerificationResult | null;
+  lut3d: Lut3DData | null;
   profilingMatrix: number[][] | null;
   profilingAccuracy: number | null;
 }

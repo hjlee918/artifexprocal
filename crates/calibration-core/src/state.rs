@@ -69,6 +69,7 @@ pub enum CalibrationEvent {
     ProgressUpdated { current: usize, total: usize },
     AnalysisComplete { gamma: f64, max_de: f64, white_balance_errors: Vec<f64> },
     LutGenerated { size: usize },
+    Lut3DData { size: usize, data: Vec<f64> },
     CorrectionsUploaded,
     SessionComplete { session_id: String },
     Error(CalibrationError),

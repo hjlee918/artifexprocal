@@ -324,7 +324,7 @@ impl CalibrationService {
         let active_session_arc = self.active_session.clone();
 
         std::thread::spawn(move || {
-            let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
+            let use_3d = config.tier != calibration_core::state::CalibrationTier::GrayscaleOnly;
 
             let storage = match Storage::new_in_memory() {
                 Ok(s) => s,
@@ -357,7 +357,13 @@ impl CalibrationService {
             let display = &mut **display_guard.as_mut().unwrap();
             let pattern_gen = &mut **pg_guard.as_mut().unwrap();
 
-            let result = flow.run_sync(meter, display, pattern_gen, &storage, &events);
+            let result = if use_3d {
+                let mut flow = calibration_engine::lut3d_flow::Lut3DAutoCalFlow::new(config);
+                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+            } else {
+                let mut flow = calibration_engine::autocal_flow::GreyscaleAutoCalFlow::new(config);
+                flow.run_sync(meter, display, pattern_gen, &storage, &events)
+            };
 
             if let Err(e) = result {
                 if abort_flag.load(Ordering::SeqCst) {

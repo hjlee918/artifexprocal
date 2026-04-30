@@ -199,6 +199,7 @@ export const EVENT_LUT_UPLOADED = "lut-uploaded" as const;
 export const EVENT_VERIFICATION_COMPLETE = "verification-complete" as const;
 export const EVENT_PROFILING_PROGRESS = "profiling-progress" as const;
 export const EVENT_LUT3D_GENERATED = "lut3d-generated" as const;
+export const EVENT_LUT3D_DATA = "lut3d-data" as const;
 export const EVENT_PROFILING_COMPLETE = "profiling-complete" as const;
 
 export type EventName =
@@ -211,4 +212,5 @@ export type EventName =
 	| typeof EVENT_VERIFICATION_COMPLETE
 	| typeof EVENT_PROFILING_PROGRESS
 	| typeof EVENT_PROFILING_COMPLETE
-	| typeof EVENT_LUT3D_GENERATED;
+	| typeof EVENT_LUT3D_GENERATED
+	| typeof EVENT_LUT3D_DATA;

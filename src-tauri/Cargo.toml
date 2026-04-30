@@ -29,6 +29,7 @@ hal_meters = { path = "../crates/hal_meters" }
 hal-displays = { path = "../crates/hal-displays" }
 calibration-core = { path = "../crates/calibration-core" }
 calibration-engine = { path = "../crates/calibration-engine" }
+calibration-autocal = { path = "../crates/calibration-autocal" }
 calibration-storage = { path = "../crates/calibration-storage" }
 reporting = { path = "../crates/reporting" }
 uuid = { version = "1", features = ["v4"] }

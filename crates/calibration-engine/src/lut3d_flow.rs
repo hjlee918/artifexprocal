@@ -189,7 +189,15 @@ impl Lut3DAutoCalFlow {
                 lut_3d_33
             };
 
+            let flat_data: Vec<f64> = lut_3d.data.iter()
+                .flat_map(|rgb| [rgb.r, rgb.g, rgb.b])
+                .collect();
+
             events.send(CalibrationEvent::LutGenerated { size: lut_3d.size });
+            events.send(CalibrationEvent::Lut3DData {
+                size: lut_3d.size,
+                data: flat_data,
+            });
             self.lut_3d = Some(lut_3d);
         }
 

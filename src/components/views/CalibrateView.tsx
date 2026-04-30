@@ -8,7 +8,7 @@ import { AnalysisStep } from "../calibrate/AnalysisStep";
 import { UploadStep } from "../calibrate/UploadStep";
 import { VerifyStep } from "../calibrate/VerifyStep";
 import type { WizardState, PatchReading, VerificationResult } from "../calibrate/types";
-import { startCalibration, EVENT_ANALYSIS_COMPLETE } from "../../bindings";
+import { startCalibration, EVENT_ANALYSIS_COMPLETE, EVENT_LUT3D_DATA } from "../../bindings";
 
 export function CalibrateView() {
   const [state, setState] = useState<WizardState>({
@@ -18,6 +18,7 @@ export function CalibrateView() {
     readings: [],
     analysis: null,
     verification: null,
+    lut3d: null,
     profilingMatrix: null,
     profilingAccuracy: null,
   });
@@ -41,7 +42,7 @@ export function CalibrateView() {
 
   useEffect(() => {
     let cancelled = false;
-    const unsubPromise = listen<{
+    const unsubAnalysis = listen<{
       session_id: string;
       gamma: number;
       max_de: number;
@@ -64,9 +65,26 @@ export function CalibrateView() {
         },
       }));
     });
+
+    const unsubLut3d = listen<{
+      session_id: string;
+      size: number;
+      data: number[];
+    }>(EVENT_LUT3D_DATA, (event) => {
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        lut3d: {
+          size: event.payload.size,
+          data: event.payload.data,
+        },
+      }));
+    });
+
     return () => {
       cancelled = true;
-      unsubPromise.then((u) => u());
+      unsubAnalysis.then((u) => u());
+      unsubLut3d.then((u) => u());
     };
   }, []);
 
@@ -120,6 +138,7 @@ export function CalibrateView() {
             onApply={handleApplyCorrections}
             onRemeasure={() => setState((s) => ({ ...s, step: "target" }))}
             tier={state.config?.tier}
+            lut3d={state.lut3d}
           />
         )}
         {state.step === "upload" && (

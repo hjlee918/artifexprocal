@@ -264,12 +264,17 @@ pub fn get_target_gamut(target_space: String) -> Result<crate::ipc::models::Gamu
 #[tauri::command]
 #[specta::specta]
 pub fn generate_3d_lut(
-    _service: State<'_, CalibrationService>,
-    _session_id: String,
+    service: State<'_, CalibrationService>,
+    session_id: String,
 ) -> Result<Lut3DInfoDto, String> {
-    // Placeholder: in full implementation, retrieve session readings and compute LUT
+    let detail = service
+        .get_session_detail(&session_id)?
+        .ok_or_else(|| "Session not found".to_string())?;
+
+    let size = detail.results.as_ref().and_then(|r| r.lut_3d_size).unwrap_or(33);
+
     Ok(Lut3DInfoDto {
-        size: 33,
+        size,
         format: "cube".to_string(),
         file_path: None,
     })
@@ -278,12 +283,57 @@ pub fn generate_3d_lut(
 #[tauri::command]
 #[specta::specta]
 pub fn export_lut(
-    _service: State<'_, CalibrationService>,
-    _session_id: String,
-    _format: String,
-    _path: String,
+    service: State<'_, CalibrationService>,
+    session_id: String,
+    format: String,
+    path: String,
 ) -> Result<(), String> {
-    // Placeholder: export LUT to the specified path
+    let detail = service
+        .get_session_detail(&session_id)?
+        .ok_or_else(|| "Session not found".to_string())?;
+
+    // Reconstruct readings as (RGB, XYZ) pairs for LUT computation
+    let patches: Vec<(color_science::types::RGB, color_science::types::XYZ)> = detail
+        .readings
+        .iter()
+        .map(|r| {
+            let rgb = color_science::types::RGB {
+                r: r.target_rgb.0,
+                g: r.target_rgb.1,
+                b: r.target_rgb.2,
+            };
+            let xyz = color_science::types::XYZ {
+                x: r.measured_xyz.x,
+                y: r.measured_xyz.y,
+                z: r.measured_xyz.z,
+            };
+            (rgb, xyz)
+        })
+        .collect();
+
+    if patches.is_empty() {
+        return Err("No readings available for LUT export".to_string());
+    }
+
+    let lut = calibration_autocal::lut3d::Lut3DEngine::compute(
+        &patches,
+        33,
+        &detail.config.target_space,
+    )
+    .map_err(|e| format!("LUT computation failed: {e}"))?;
+
+    let mut file = std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {e}"))?;
+
+    match format.to_lowercase().as_str() {
+        "cube" => calibration_autocal::export::Lut3DExporter::export_cube(&lut, &mut file,
+        )
+        .map_err(|e| format!("Export failed: {e}"))?,
+        "3dl" => calibration_autocal::export::Lut3DExporter::export_3dl(&lut, &mut file,
+        )
+        .map_err(|e| format!("Export failed: {e}"))?,
+        _ => return Err(format!("Unsupported LUT format: {format}")),
+    }
+
     Ok(())
 }
 

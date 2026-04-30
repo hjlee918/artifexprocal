@@ -4,7 +4,7 @@ import { GrayscaleTracker, type GrayscalePoint } from "../visualizations/Graysca
 import { PatchDataTable } from "./PatchDataTable";
 import { Lut3DTab } from "./Lut3DTab";
 import { getTargetGamut } from "../../lib/colorMath";
-import type { PatchReading, AnalysisResult } from "./types";
+import type { PatchReading, AnalysisResult, Lut3DData } from "./types";
 
 export function AnalysisStep({
   readings,
@@ -13,6 +13,7 @@ export function AnalysisStep({
   onApply,
   onRemeasure,
   tier,
+  lut3d,
 }: {
   readings: PatchReading[];
   analysis: AnalysisResult;
@@ -20,6 +21,7 @@ export function AnalysisStep({
   onApply: () => void;
   onRemeasure: () => void;
   tier?: string;
+  lut3d?: Lut3DData | null;
 }) {
   const [activeTab, setActiveTab] = useState<"summary" | "3d-lut">("summary");
   const gammaPoints: GrayscalePoint[] = readings.map((r) => ({
@@ -114,7 +116,11 @@ export function AnalysisStep({
       )}
 
       {activeTab === "3d-lut" && (
-        <Lut3DTab has3DLut={tier !== "GrayscaleOnly"} lutSize={33} />
+        <Lut3DTab
+          has3DLut={tier !== "GrayscaleOnly"}
+          lutSize={lut3d?.size ?? 33}
+          lutData={lut3d?.data}
+        />
       )}
 
       {/* Actions */}

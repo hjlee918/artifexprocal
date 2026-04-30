@@ -113,6 +113,24 @@ pub fn emit_lut_uploaded(app: &AppHandle, session_id: String) {
     }
 }
 
+pub fn emit_lut3d_data(
+    app: &AppHandle,
+    session_id: String,
+    size: usize,
+    data: Vec<f64>,
+) {
+    if let Err(e) = app.emit(
+        "lut3d-data",
+        serde_json::json!({
+            "session_id": session_id,
+            "size": size,
+            "data": data,
+        }),
+    ) {
+        eprintln!("Failed to emit lut3d-data: {}", e);
+    }
+}
+
 pub fn emit_lut3d_generated(
     app: &AppHandle,
     session_id: String,
@@ -250,6 +268,9 @@ pub fn emit_engine_event(
         }
         CalibrationEvent::LutGenerated { size: _ } => {
             emit_lut_uploaded(app, session_id.to_string());
+        }
+        CalibrationEvent::Lut3DData { size, data } => {
+            emit_lut3d_data(app, session_id.to_string(), size, data.clone());
         }
         CalibrationEvent::CorrectionsUploaded => {
             emit_lut_uploaded(app, session_id.to_string());
