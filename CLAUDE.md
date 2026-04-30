@@ -105,7 +105,11 @@ Modular crate structure:
 
 **Linux/Windows:** Native HID via `hidapi` + challenge-response unlock protocol (`i1d3_unlock.rs`). 11 known OEM keys exist. `I1D3_ESCAPE` env var for unknown variants. Unlock protocol proven correct on physical hardware.
 
-**ArgyllCMS dependency:** Cannot bundle due to AGPL. Must prompt user to install (`brew install argyll-cms`). Only required on macOS.
+**ArgyllCMS dependency:** Cannot bundle due to AGPL. Must prompt user to install via Homebrew:
+```bash
+brew install argyll
+```
+Note: the formula is `argyll`, not `argyll-cms`. Only required on macOS.
 
 ### i1 Pro 2
 
@@ -156,16 +160,16 @@ Modular crate structure:
 - `start_calibration(picMode)` — Enter calibration mode for a specific picture profile
 - `end_calibration()` — Exit calibration mode and lock state
 - `upload_1d_lut(data)` / `upload_1d_lut_from_file(path)` — Upload 1D LUT (1024 entries for SDR)
-- `upload_3d_lut_bt709_from_file(path)` — Upload 3D LUT for BT.709 (33x33x33 on Alpha 9 Gen 4+)
+- `upload_3d_lut_bt709_from_file(path)` — Upload 3D LUT for BT.709 (33×33×33 on Alpha 9 Gen 2+, 17×17×17 on Gen 1 / Alpha 7)
 - `upload_3d_lut_bt2020_from_file(path)` — Upload 3D LUT for BT.2020
 - `set_dolby_vision_config_data(data)` — Upload Dolby Vision configuration
-- `set_3by3_gamut_data(matrix)` — Upload 3x3 gamut correction matrix
+- `set_3by3_gamut_data(matrix)` — Upload 3×3 gamut correction matrix
 - `set_tonemap_params(params)` — Set HDR10 tone mapping parameters
 - `ddc_reset` — Reset DDC controls to factory defaults
 
 **Picture Mode Independence:** SDR, HDR10, and Dolby Vision are completely independent. To upload a LUT for a specific mode, the TV must be receiving that signal type (e.g., HDR10 content playing for HDR10 LUT upload, DV blank video for DV config upload).
 
-**Chip Differences:** Alpha 9 Gen 4 (C1) uses 33-point 3D LUTs; Alpha 7 uses 17-point. Model string available from `get_software_info` SSAP response.
+**Chip Differences:** Alpha 9 Gen 2+ (C9 and later) uses 33-point 3D LUTs; Alpha 9 Gen 1 (B8) and Alpha 7 use 17-point. Model string available from `get_software_info` SSAP response. Always detect chip generation before selecting LUT grid size.
 
 ### iTPG (Internal Test Pattern Generator)
 
@@ -175,9 +179,9 @@ Available on 2019+ LG OLED models. Accessible via SSAP/WebSocket during calibrat
 - `start_itpg()` — Enable internal pattern generator
 - `stop_itpg()` — Disable internal pattern generator
 - `set_itpg_patch_window(win_h, win_v, patch_h, patch_v)` — Set window and patch size
-- `set_itpg_patch_color(r, g, b, ...)` — Set current patch color (10-bit values, 0-1023)
+- `set_itpg_patch_color(r, g, b, ...)` — Set current patch color (10-bit values, 0–1023)
 
-**Note:** iTPG operates at the TV's native bit depth. RGB values are 10-bit (0-1023). The iTPG cannot generate Dolby Vision metadata, so DV calibration cannot be verified using iTPG alone.
+**Note:** iTPG operates at the TV's native bit depth. RGB values are 10-bit (0–1023). The iTPG cannot generate Dolby Vision metadata, so DV calibration cannot be verified using iTPG alone.
 
 ### PGenerator 1.6 HTTP API (External Pattern Generator)
 
@@ -186,7 +190,7 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 **Base URL:** `http://<pi-ip>:8080`
 
 **Endpoints:**
-- `GET /patch?r=<R>&g=<G>&b=<B>` — Display patch with 8-bit RGB values (0-255)
+- `GET /patch?r=<R>&g=<G>&b=<B>` — Display patch with 8-bit RGB values (0–255)
 - `GET /patch?r=0&g=0&b=0` — Display black patch
 
 **Implementation Notes:**
@@ -201,7 +205,7 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 
 **Equipment Warm-up:**
 - TV: Powered on with standard content for minimum 45 minutes (preferably 1 hour)
-- Probes: Connected to USB port of calibration computer for 20-30 minutes minimum
+- Probes: Connected to USB port of calibration computer for 20–30 minutes minimum
 
 **TV Settings Preparation:**
 - Disable processing (2021+ LG OLED models have specific processing disable steps)
@@ -253,7 +257,7 @@ PGenerator by LightSpace runs on Raspberry Pi 4 and accepts HTTP commands to dis
 
 ## Firmware Warnings
 
-- **webOS 7.3+:** Communication protocol changed and broke existing calibration tools. Do not update to webOS 7.3 if calibration compatibility is required.
+- **webOS 7.3+:** The communication protocol changed and broke existing calibration tools including CalMAN. Do not update to webOS 7.3 if calibration compatibility with current tools is required. However, bscpylgtv and ColorControl have partial 7.3+ support — check firmware version via `get_software_info` and adapt the command set accordingly. v2 should target compatibility with both pre-7.3 and post-7.3 by detecting firmware version at connection time.
 - **Model/Year Differences:** The LG command protocol is inconsistent between models and firmware versions. Commands must be validated per model/year combination.
 
 ---
