@@ -1,7 +1,14 @@
 import { useDashboardStore } from "../../store/useDashboardStore";
-import { Plug, Monitor, Layers, Gauge, Hand } from "lucide-react";
-import { useState } from "react";
+import { Plug, Monitor, Layers, Gauge, Hand, Loader2, Link } from "lucide-react";
+import { useState, useEffect } from "react";
 import type { CalibrationMode } from "./types";
+import {
+  getDeviceInventory,
+  connectMeter,
+  connectDisplay,
+  getAppState,
+} from "../../bindings";
+import type { DeviceInfo } from "../../bindings";
 
 export function DeviceSelectionStep({
   onNext,
@@ -10,8 +17,58 @@ export function DeviceSelectionStep({
 }) {
   const meterStatus = useDashboardStore((s) => s.meterStatus);
   const displayStatus = useDashboardStore((s) => s.displayStatus);
+  const setMeterStatus = useDashboardStore((s) => s.setMeterStatus);
+  const setDisplayStatus = useDashboardStore((s) => s.setDisplayStatus);
   const [mode, setMode] = useState<CalibrationMode>("autocal");
   const [profileFirst, setProfileFirst] = useState(false);
+  const [inventory, setInventory] = useState<DeviceInfo[]>([]);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDeviceInventory().then(setInventory).catch(() => {});
+    getAppState()
+      .then((state) => {
+        if (state.meters.length > 0) {
+          const m = state.meters[0];
+          setMeterStatus({ id: m.id, name: m.name, connected: m.connected, type: "meter" });
+        }
+        if (state.displays.length > 0) {
+          const d = state.displays[0];
+          setDisplayStatus({ id: d.id, name: d.name, connected: d.connected, type: "display" });
+        }
+      })
+      .catch(() => {});
+  }, [setMeterStatus, setDisplayStatus]);
+
+  const availableMeters = inventory.filter((d) => d.device_type === "meter");
+  const availableDisplays = inventory.filter((d) => d.device_type === "display");
+
+  const handleConnectMeter = async (id: string) => {
+    setConnecting(id);
+    setConnectError(null);
+    try {
+      const info = await connectMeter(id);
+      setMeterStatus({ id: info.id, name: info.name, connected: info.connected, type: "meter" });
+    } catch (e) {
+      setConnectError(`Meter: ${e}`);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const handleConnectDisplay = async (id: string) => {
+    setConnecting(id);
+    setConnectError(null);
+    try {
+      const info = await connectDisplay(id);
+      setDisplayStatus({ id: info.id, name: info.name, connected: info.connected, type: "display" });
+    } catch (e) {
+      setConnectError(`Display: ${e}`);
+    } finally {
+      setConnecting(null);
+    }
+  };
 
   const allConnected = meterStatus?.connected && displayStatus?.connected;
 
@@ -23,12 +80,20 @@ export function DeviceSelectionStep({
           label="Meter"
           name={meterStatus?.name ?? "Not connected"}
           connected={meterStatus?.connected ?? false}
+          connectable={!meterStatus?.connected}
+          availableDevices={availableMeters}
+          connectingId={connecting}
+          onConnect={handleConnectMeter}
         />
         <DeviceCard
           icon={<Monitor size={20} />}
           label="Display"
           name={displayStatus?.name ?? "Not connected"}
           connected={displayStatus?.connected ?? false}
+          connectable={!displayStatus?.connected}
+          availableDevices={availableDisplays}
+          connectingId={connecting}
+          onConnect={handleConnectDisplay}
         />
         <DeviceCard
           icon={<Layers size={20} />}
@@ -37,6 +102,12 @@ export function DeviceSelectionStep({
           connected={true}
         />
       </div>
+
+      {connectError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
+          {connectError}
+        </div>
+      )}
 
       <div className="bg-surface-200 border border-gray-800 rounded-lg p-4 space-y-3">
         <div className="text-sm font-medium">Pre-flight Checklist</div>
@@ -93,11 +164,19 @@ function DeviceCard({
   label,
   name,
   connected,
+  connectable,
+  availableDevices,
+  connectingId,
+  onConnect,
 }: {
   icon: React.ReactNode;
   label: string;
   name: string;
   connected: boolean;
+  connectable?: boolean;
+  availableDevices?: DeviceInfo[];
+  connectingId?: string | null;
+  onConnect?: (id: string) => void;
 }) {
   return (
     <div className="bg-surface-200 border border-gray-800 rounded-lg p-4">
@@ -109,6 +188,25 @@ function DeviceCard({
       <div className={`text-xs mt-1 ${connected ? "text-green-500" : "text-red-500"}`}>
         {connected ? "● Connected" : "● Not connected"}
       </div>
+      {connectable && availableDevices && availableDevices.length > 0 && onConnect && (
+        <div className="mt-3 space-y-1.5">
+          {availableDevices.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => onConnect(d.id)}
+              disabled={connectingId === d.id}
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-primary/10 text-primary border border-primary/20 rounded hover:bg-primary/20 transition disabled:opacity-50"
+            >
+              {connectingId === d.id ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Link size={12} />
+              )}
+              Connect {d.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
