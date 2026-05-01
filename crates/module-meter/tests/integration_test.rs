@@ -987,6 +987,15 @@ async fn clear_history_empties_export() {
     let json_str = json_export["json"].as_str().unwrap();
     let arr: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
     assert!(arr.is_empty());
+
+    // CSV export after clear must still contain the 35-column header row.
+    let csv_export = module
+        .handle_command("export_csv", serde_json::json!({}))
+        .unwrap();
+    let csv_str = csv_export["csv"].as_str().unwrap();
+    let lines: Vec<&str> = csv_str.lines().collect();
+    assert_eq!(lines.len(), 1, "expected only header row after clear");
+    assert!(lines[0].starts_with("measurement_uuid"));
 }
 
 #[tokio::test]
@@ -1090,4 +1099,171 @@ async fn export_csv_round_trip() {
     let duv_idx = headers.iter().position(|h| h == "duv").unwrap();
     assert!(!records[0][cct_idx].is_empty(), "cct should be populated");
     assert!(!records[0][duv_idx].is_empty(), "duv should be populated");
+}
+
+#[tokio::test]
+async fn export_json_roundtrip_preserves_data() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let values: Vec<color_science::types::Xyz> = vec![
+        color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 },
+        color_science::types::Xyz { x: 11.0, y: 21.0, z: 31.0 },
+        color_science::types::Xyz { x: 12.0, y: 22.0, z: 32.0 },
+        color_science::types::Xyz { x: 13.0, y: 23.0, z: 33.0 },
+        color_science::types::Xyz { x: 14.0, y: 24.0, z: 34.0 },
+    ];
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "Sequence": {
+                        "values": [
+                            { "Ok": values[0] },
+                            { "Ok": values[1] },
+                            { "Ok": values[2] },
+                            { "Ok": values[3] },
+                            { "Ok": values[4] }
+                        ],
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    for _ in 0..5 {
+        module
+            .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+            .unwrap();
+    }
+
+    let json_export = module
+        .handle_command("export_json", serde_json::json!({}))
+        .unwrap();
+    let json_str = json_export["json"].as_str().unwrap();
+
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+    assert_eq!(parsed.len(), 5);
+
+    for (i, item) in parsed.iter().enumerate() {
+        let uuid = item["measurementUuid"].as_str().unwrap();
+        assert!(!uuid.is_empty(), "item {} should have a UUID", i);
+
+        let x = item["xyz"]["x"].as_f64().unwrap();
+        let y = item["xyz"]["y"].as_f64().unwrap();
+        let z = item["xyz"]["z"].as_f64().unwrap();
+
+        // JSON round-trip of f64 may introduce tiny epsilon; compare with tolerance.
+        assert!(
+            (x - values[i].x).abs() < 1e-9,
+            "item {} x mismatch: expected {}, got {}",
+            i,
+            values[i].x,
+            x
+        );
+        assert!(
+            (y - values[i].y).abs() < 1e-9,
+            "item {} y mismatch: expected {}, got {}",
+            i,
+            values[i].y,
+            y
+        );
+        assert!(
+            (z - values[i].z).abs() < 1e-9,
+            "item {} z mismatch: expected {}, got {}",
+            i,
+            values[i].z,
+            z
+        );
+    }
+}
+
+#[tokio::test]
+async fn export_schema_patch_correlation_truth_table() {
+    // Load the Phase 1 schema directly from disk (same file export.rs embeds).
+    let schema_str =
+        std::fs::read_to_string("../../docs/schemas/meter-export-phase1.json").unwrap();
+    let schema: serde_json::Value = serde_json::from_str(&schema_str).unwrap();
+
+    // Helper: build a minimal conformant object with patch fields parameterized.
+    let base = || serde_json::json!({
+        "measurementUuid": "550e8400-e29b-41d4-a716-446655440000",
+        "schemaVersion": "1.0",
+        "softwareVersion": "2.0.0-phase1",
+        "timestamp": "2026-04-30T12:00:00.123Z",
+        "mode": "Emissive",
+        "instrument": { "model": "FakeMeter", "id": "mock:1" },
+        "xyz": { "x": 76.037, "y": 80.0, "z": 87.106 },
+        "xyy": { "x": 0.3127, "y": 0.3290, "yLum": 80.0 },
+        "lab": { "l": 83.138, "a": 0.0, "b": -1.803 },
+        "lch": { "l": 83.138, "c": 1.803, "h": 270.0 },
+        "uvPrime": { "u": 0.1978, "v": 0.4683 },
+        "cct": 6504.0,
+        "duv": 0.0,
+        "deltaE2000": null,
+        "target": null,
+        "patchRgb": null,
+        "patchBitDepth": null,
+        "patchColorspace": "",
+        "referenceWhite": "D65",
+        "sessionId": null,
+        "sequenceIndex": null,
+        "label": ""
+    });
+
+    // ── Valid cases ─────────────────────────────────────────────
+
+    // Case 1: real colorspace + object RGB + integer bit depth → valid
+    let mut case1 = base();
+    case1["patchColorspace"] = "BT.709".into();
+    case1["patchRgb"] = serde_json::json!({ "r": 52428, "g": 52428, "b": 52428 });
+    case1["patchBitDepth"] = serde_json::json!(16);
+    jsonschema::validate(&schema, &case1).expect("case 1 (real colorspace + object RGB + integer) should be valid");
+
+    // Case 2: empty colorspace + null RGB + null bit depth → valid
+    let case2 = base();
+    jsonschema::validate(&schema, &case2).expect("case 2 (empty colorspace + null patch) should be valid");
+
+    // ── Rejected cases ──────────────────────────────────────────
+
+    // Case 3: real colorspace + null RGB + null bit depth → rejected
+    let mut case3 = base();
+    case3["patchColorspace"] = "BT.709".into();
+    assert!(
+        jsonschema::validate(&schema, &case3).is_err(),
+        "case 3 (real colorspace + null patch) should be rejected"
+    );
+
+    // Case 4: empty colorspace + object RGB + integer bit depth → rejected
+    let mut case4 = base();
+    case4["patchRgb"] = serde_json::json!({ "r": 52428, "g": 52428, "b": 52428 });
+    case4["patchBitDepth"] = serde_json::json!(16);
+    assert!(
+        jsonschema::validate(&schema, &case4).is_err(),
+        "case 4 (empty colorspace + object patch) should be rejected"
+    );
+
+    // Case 5: real colorspace + object RGB + null bit depth → rejected
+    let mut case5 = base();
+    case5["patchColorspace"] = "BT.709".into();
+    case5["patchRgb"] = serde_json::json!({ "r": 52428, "g": 52428, "b": 52428 });
+    assert!(
+        jsonschema::validate(&schema, &case5).is_err(),
+        "case 5 (real colorspace + object RGB + null bitDepth) should be rejected"
+    );
+
+    // Case 6: empty colorspace + null RGB + integer bit depth → rejected
+    let mut case6 = base();
+    case6["patchBitDepth"] = serde_json::json!(8);
+    assert!(
+        jsonschema::validate(&schema, &case6).is_err(),
+        "case 6 (empty colorspace + null RGB + integer bitDepth) should be rejected"
+    );
 }

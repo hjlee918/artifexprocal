@@ -118,17 +118,24 @@
       }
     },
     "patchRgb": {
-      "type": "object",
-      "required": ["r", "g", "b"],
-      "properties": {
-        "r": { "type": "number" },
-        "g": { "type": "number" },
-        "b": { "type": "number" }
-      }
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["r", "g", "b"],
+          "properties": {
+            "r": { "type": "number" },
+            "g": { "type": "number" },
+            "b": { "type": "number" }
+          }
+        },
+        { "type": "null" }
+      ]
     },
     "patchBitDepth": {
-      "type": "integer",
-      "enum": [8, 10, 12, 16]
+      "anyOf": [
+        { "type": "integer", "enum": [8, 10, 12, 16] },
+        { "type": "null" }
+      ]
     },
     "patchColorspace": {
       "type": "string",
@@ -155,6 +162,31 @@
     },
     "label": {
       "type": "string"
+    }
+  },
+  "if": {
+    "properties": {
+      "patchColorspace": { "const": "" }
+    }
+  },
+  "then": {
+    "properties": {
+      "patchRgb": { "type": "null" },
+      "patchBitDepth": { "type": "null" }
+    }
+  },
+  "else": {
+    "properties": {
+      "patchRgb": {
+        "type": "object",
+        "required": ["r", "g", "b"],
+        "properties": {
+          "r": { "type": "number" },
+          "g": { "type": "number" },
+          "b": { "type": "number" }
+        }
+      },
+      "patchBitDepth": { "type": "integer", "enum": [8, 10, 12, 16] }
     }
   }
 }
