@@ -94,3 +94,82 @@ async fn meter_module_fake_meter_end_to_end() {
         )
         .expect("disconnect should succeed");
 }
+
+#[tokio::test]
+async fn meter_module_planckian_sweep() {
+    // ── Setup ──────────────────────────────────────────────
+    let event_bus = Arc::new(EventBus::new());
+    let ctx = ModuleContext::new(event_bus.clone());
+
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    // ── Connect with PlanckianSweep config ─────────────────
+    let connect_result = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 10000.0,
+                        "steps": 8,
+                        "target_luminance": 100.0,
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .expect("connect with PlanckianSweep should succeed");
+    let meter_id = connect_result["meter_id"]
+        .as_str()
+        .expect("connect should return meter_id");
+
+    // ── Read 8 times, collect XYZ ────────────────────────
+    let mut readings = Vec::new();
+    for _ in 0..8 {
+        let read_result = module
+            .handle_command(
+                "read",
+                serde_json::json!({ "meter_id": meter_id }),
+            )
+            .expect("read should succeed");
+        let result: color_science::measurement::MeasurementResult =
+            serde_json::from_value(read_result).expect("read should return MeasurementResult");
+        readings.push(result.xyz);
+    }
+
+    // All 8 readings must be pairwise distinct.
+    for i in 0..readings.len() {
+        for j in (i + 1)..readings.len() {
+            assert_ne!(
+                readings[i], readings[j],
+                "readings at index {} and {} should differ",
+                i, j
+            );
+        }
+    }
+
+    // ── Read past end should fail ─────────────────────────
+    let err = module
+        .handle_command(
+            "read",
+            serde_json::json!({ "meter_id": meter_id }),
+        )
+        .expect_err("read past end should fail");
+    assert!(
+        err.to_string().contains("SequenceExhausted")
+            || err.to_string().contains("sequence exhausted"),
+        "expected SequenceExhausted, got: {}",
+        err
+    );
+
+    // ── Disconnect ─────────────────────────────────────────
+    module
+        .handle_command(
+            "disconnect",
+            serde_json::json!({ "meter_id": meter_id }),
+        )
+        .expect("disconnect should succeed");
+}

@@ -15,6 +15,7 @@ pub enum MeterError {
     JoinError(String),
     CalibrationRequired,
     InvalidMode,
+    SequenceExhausted,
     Other(String),
 }
 
@@ -30,6 +31,7 @@ impl fmt::Display for MeterError {
             MeterError::JoinError(msg) => write!(f, "Task join error: {}", msg),
             MeterError::CalibrationRequired => write!(f, "Meter requires calibration"),
             MeterError::InvalidMode => write!(f, "Invalid measurement mode"),
+            MeterError::SequenceExhausted => write!(f, "Measurement sequence exhausted"),
             MeterError::Other(msg) => write!(f, "{}", msg),
         }
     }

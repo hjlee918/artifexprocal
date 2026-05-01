@@ -6,8 +6,15 @@ use app_core::{
 };
 use color_science::measurement::MeasurementResult;
 use hal::meter::Meter;
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+
+#[derive(Debug, Deserialize)]
+struct ConnectRequest {
+    instrument_id: String,
+    fake_meter_config: Option<hal_meters::FakeMeterConfig>,
+}
 
 /// Runtime state for an actively connected meter.
 struct ActiveMeter {
@@ -45,25 +52,29 @@ impl MeterModule {
     }
 
     fn cmd_connect(&mut self, payload: Value) -> Result<Value, CommandError> {
-        let instrument_id = payload
-            .get("instrument_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| CommandError::InvalidPayload("missing instrument_id".to_string()))?;
+        let req: ConnectRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
 
-        if instrument_id != "fake-meter-1" {
+        if req.instrument_id != "fake-meter-1" {
             return Err(CommandError::ExecutionFailed(format!(
                 "instrument {} not found",
-                instrument_id
+                req.instrument_id
             )));
         }
 
         let meter_id = uuid::Uuid::new_v4().to_string();
-        let driver: Box<dyn Meter> = Box::new(hal_meters::FakeMeter::new());
+        let driver: Box<dyn Meter> = match req.fake_meter_config {
+            Some(config) => Box::new(
+                hal_meters::FakeMeter::with_config(config)
+                    .map_err(|e| CommandError::ExecutionFailed(e.to_string()))?,
+            ),
+            None => Box::new(hal_meters::FakeMeter::new()),
+        };
 
         self.active_meters.insert(
             meter_id.clone(),
             ActiveMeter {
-                instrument_id: instrument_id.to_string(),
+                instrument_id: req.instrument_id,
                 instrument_model: "FakeMeter".to_string(),
                 driver,
             },
