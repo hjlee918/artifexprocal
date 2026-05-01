@@ -1,13 +1,9 @@
 //! hal — Hardware abstraction layer traits.
+//!
+//! Phase 1 scope: Meter trait only. DisplayController and PatternGenerator
+//! are intentionally excluded — they belong in `hal-future-traits` as
+//! design sketches until Phase 3+.
 
-pub mod display;
 pub mod meter;
-pub mod pattern_gen;
-pub mod types;
 
-pub use display::{DisplayController, DisplayError};
 pub use meter::{MeasurementMode, Meter, MeterError};
-pub use pattern_gen::{PatternGenError, PatternGenerator};
-pub use types::{
-    CalibrationData, Lut1D, Lut3D, Patch, PictureMode, WhiteBalance,
-};

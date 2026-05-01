@@ -1,4 +1,4 @@
-//! Shared types for HAL drivers.
+//! Shared types for future HAL drivers (design sketches).
 
 use serde::{Deserialize, Serialize};
 

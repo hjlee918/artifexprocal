@@ -1,0 +1,11 @@
+[package]
+name = "module-meter"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "MeterModule — CalibrationModule implementation for meters"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

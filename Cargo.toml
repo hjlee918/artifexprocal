@@ -6,6 +6,7 @@ members = [
     "crates/hal",
     "crates/hal-meters",
     "crates/module-meter",
+    "crates/hal-future-traits",
 ]
 resolver = "2"
 
