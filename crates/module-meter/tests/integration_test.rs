@@ -995,7 +995,9 @@ async fn clear_history_empties_export() {
     let csv_str = csv_export["csv"].as_str().unwrap();
     let lines: Vec<&str> = csv_str.lines().collect();
     assert_eq!(lines.len(), 1, "expected only header row after clear");
-    assert!(lines[0].starts_with("measurement_uuid"));
+    let cols: Vec<&str> = lines[0].split(',').collect();
+    assert_eq!(cols.len(), 34, "CSV header must have exactly 34 columns");
+    assert_eq!(cols[0], "measurement_uuid");
 }
 
 #[tokio::test]
