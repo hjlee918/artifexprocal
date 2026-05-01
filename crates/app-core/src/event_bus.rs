@@ -3,6 +3,7 @@
 //! Uses tokio::sync::broadcast for fan-out event delivery.
 
 use color_science::measurement::MeasurementResult;
+use crate::registers::RegisterSlot;
 use tokio::sync::broadcast;
 
 /// Default channel capacity for the event bus.
@@ -51,6 +52,11 @@ pub enum ModuleEvent {
     ContinuousReadStopped {
         meter_id: String,
         reason: ContinuousReadStopReason,
+    },
+    /// A register slot was updated by an explicit set or clear.
+    RegisterChanged {
+        slot: RegisterSlot,
+        measurement: Option<MeasurementResult>,
     },
 }
 
@@ -145,6 +151,31 @@ mod tests {
         let event = ModuleEvent::MeasurementReceived {
             meter_id: "meter-1".to_string(),
             measurement,
+        };
+        bus.publish(event.clone());
+
+        let received = rx.recv().await.expect("should receive event");
+        assert_eq!(received, event);
+    }
+
+    #[tokio::test]
+    async fn event_bus_delivers_register_changed() {
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+
+        let measurement = MeasurementResult::from_xyz(
+            color_science::types::Xyz {
+                x: 95.047,
+                y: 100.0,
+                z: 108.883,
+            },
+            "meter-1",
+            "fake-1",
+            "FakeMeter",
+        );
+        let event = ModuleEvent::RegisterChanged {
+            slot: RegisterSlot::Reference,
+            measurement: Some(measurement),
         };
         bus.publish(event.clone());
 

@@ -588,3 +588,340 @@ async fn single_read_rejected_during_continuous() {
         )
         .unwrap();
 }
+
+// ── Register slot tests ────────────────────────────────────────────
+
+#[tokio::test]
+async fn set_current_get_all() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let measurement = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 },
+        "meter-1",
+        "fake-1",
+        "FakeMeter",
+    );
+
+    module
+        .handle_command(
+            "set_register",
+            serde_json::json!({
+                "slot": "Current",
+                "measurement": measurement
+            }),
+        )
+        .unwrap();
+
+    let all = module
+        .handle_command("get_all_registers", serde_json::json!({}))
+        .unwrap();
+
+    let map: std::collections::HashMap<app_core::RegisterSlot, color_science::measurement::MeasurementResult> =
+        serde_json::from_value(all).unwrap();
+
+    assert_eq!(map.len(), 1);
+    assert!(map.contains_key(&app_core::RegisterSlot::Current));
+    assert!(!map.contains_key(&app_core::RegisterSlot::Reference));
+    assert!(!map.contains_key(&app_core::RegisterSlot::W));
+}
+
+#[tokio::test]
+async fn set_all_three_slots() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    for (slot, xyz) in [
+        ("Current", color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 }),
+        ("Reference", color_science::types::Xyz { x: 11.0, y: 21.0, z: 31.0 }),
+        ("W", color_science::types::Xyz { x: 12.0, y: 22.0, z: 32.0 }),
+    ] {
+        let measurement = color_science::measurement::MeasurementResult::from_xyz(
+            xyz, "meter-1", "fake-1", "FakeMeter",
+        );
+        module
+            .handle_command(
+                "set_register",
+                serde_json::json!({ "slot": slot, "measurement": measurement }),
+            )
+            .unwrap();
+    }
+
+    let all = module
+        .handle_command("get_all_registers", serde_json::json!({}))
+        .unwrap();
+    let map: std::collections::HashMap<app_core::RegisterSlot, color_science::measurement::MeasurementResult> =
+        serde_json::from_value(all).unwrap();
+
+    assert_eq!(map.len(), 3);
+    assert!(map.contains_key(&app_core::RegisterSlot::Current));
+    assert!(map.contains_key(&app_core::RegisterSlot::Reference));
+    assert!(map.contains_key(&app_core::RegisterSlot::W));
+}
+
+#[tokio::test]
+async fn clear_reference() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    for (slot, xyz) in [
+        ("Current", color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 }),
+        ("Reference", color_science::types::Xyz { x: 11.0, y: 21.0, z: 31.0 }),
+        ("W", color_science::types::Xyz { x: 12.0, y: 22.0, z: 32.0 }),
+    ] {
+        let measurement = color_science::measurement::MeasurementResult::from_xyz(
+            xyz, "meter-1", "fake-1", "FakeMeter",
+        );
+        module
+            .handle_command(
+                "set_register",
+                serde_json::json!({ "slot": slot, "measurement": measurement }),
+            )
+            .unwrap();
+    }
+
+    module
+        .handle_command(
+            "clear_register",
+            serde_json::json!({ "slot": "Reference" }),
+        )
+        .unwrap();
+
+    let all = module
+        .handle_command("get_all_registers", serde_json::json!({}))
+        .unwrap();
+    let map: std::collections::HashMap<app_core::RegisterSlot, color_science::measurement::MeasurementResult> =
+        serde_json::from_value(all).unwrap();
+
+    assert_eq!(map.len(), 2);
+    assert!(map.contains_key(&app_core::RegisterSlot::Current));
+    assert!(!map.contains_key(&app_core::RegisterSlot::Reference));
+    assert!(map.contains_key(&app_core::RegisterSlot::W));
+}
+
+#[tokio::test]
+async fn set_current_twice() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let m1 = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 1.0, y: 2.0, z: 3.0 },
+        "meter-1", "fake-1", "FakeMeter",
+    );
+    let m2 = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 4.0, y: 5.0, z: 6.0 },
+        "meter-1", "fake-1", "FakeMeter",
+    );
+
+    module
+        .handle_command(
+            "set_register",
+            serde_json::json!({ "slot": "Current", "measurement": m1 }),
+        )
+        .unwrap();
+    module
+        .handle_command(
+            "set_register",
+            serde_json::json!({ "slot": "Current", "measurement": m2.clone() }),
+        )
+        .unwrap();
+
+    let all = module
+        .handle_command("get_all_registers", serde_json::json!({}))
+        .unwrap();
+    let map: std::collections::HashMap<app_core::RegisterSlot, color_science::measurement::MeasurementResult> =
+        serde_json::from_value(all).unwrap();
+
+    assert_eq!(map.len(), 1);
+    let stored = map.get(&app_core::RegisterSlot::Current).unwrap();
+    assert!(
+        (stored.xyz.x - m2.xyz.x).abs() < 0.001,
+        "expected second measurement (last-write-wins)"
+    );
+}
+
+#[tokio::test]
+async fn invalid_slot_name() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let measurement = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 },
+        "meter-1", "fake-1", "FakeMeter",
+    );
+
+    let err = module
+        .handle_command(
+            "set_register",
+            serde_json::json!({ "slot": "Bogus", "measurement": measurement }),
+        )
+        .expect_err("Bogus slot should fail");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("unknown variant")
+            && msg.contains("Bogus")
+            && msg.contains("Current")
+            && msg.contains("Reference")
+            && msg.contains("W"),
+        "expected human-readable unknown variant error, got: {}",
+        msg
+    );
+}
+
+#[tokio::test]
+async fn read_populates_current() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let all = module
+        .handle_command("get_all_registers", serde_json::json!({}))
+        .unwrap();
+    let map: std::collections::HashMap<app_core::RegisterSlot, color_science::measurement::MeasurementResult> =
+        serde_json::from_value(all).unwrap();
+
+    assert_eq!(map.len(), 1);
+    assert!(map.contains_key(&app_core::RegisterSlot::Current));
+}
+
+#[tokio::test]
+async fn event_on_set() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let measurement = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 },
+        "meter-1", "fake-1", "FakeMeter",
+    );
+
+    module
+        .handle_command(
+            "set_register",
+            serde_json::json!({ "slot": "Reference", "measurement": measurement.clone() }),
+        )
+        .unwrap();
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive event")
+        .expect("channel open");
+
+    assert!(
+        matches!(
+            event,
+            app_core::ModuleEvent::RegisterChanged {
+                slot: app_core::RegisterSlot::Reference,
+                measurement: Some(_),
+            }
+        ),
+        "expected RegisterChanged(Reference, Some), got {:?}",
+        event
+    );
+}
+
+#[tokio::test]
+async fn event_on_clear() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let measurement = color_science::measurement::MeasurementResult::from_xyz(
+        color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 },
+        "meter-1", "fake-1", "FakeMeter",
+    );
+
+    module
+        .handle_command(
+            "set_register",
+            serde_json::json!({ "slot": "W", "measurement": measurement }),
+        )
+        .unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    module
+        .handle_command("clear_register", serde_json::json!({ "slot": "W" }))
+        .unwrap();
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive event")
+        .expect("channel open");
+
+    assert!(
+        matches!(
+            event,
+            app_core::ModuleEvent::RegisterChanged {
+                slot: app_core::RegisterSlot::W,
+                measurement: None,
+            }
+        ),
+        "expected RegisterChanged(W, None), got {:?}",
+        event
+    );
+}
+
+#[tokio::test]
+async fn no_register_changed_on_read() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    // Expect MeasurementReceived — but NOT RegisterChanged.
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive event")
+        .expect("channel open");
+
+    assert!(
+        matches!(event, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        event
+    );
+
+    // Verify no further events (specifically no RegisterChanged).
+    let maybe = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
+    assert!(
+        maybe.is_err(),
+        "expected no RegisterChanged on auto-populated Current, got {:?}",
+        maybe
+    );
+}

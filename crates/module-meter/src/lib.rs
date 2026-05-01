@@ -2,7 +2,7 @@
 
 use app_core::{
     CalibrationModule, CommandError, ContinuousReadStopReason, EventBus, ModuleCapability,
-    ModuleCommandDef, ModuleContext, ModuleError, ModuleEvent,
+    ModuleCommandDef, ModuleContext, ModuleError, ModuleEvent, RegisterSlot,
 };
 use color_science::measurement::MeasurementResult;
 use hal::meter::Meter;
@@ -29,6 +29,17 @@ struct StopContinuousRequest {
     meter_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SetRegisterRequest {
+    slot: RegisterSlot,
+    measurement: MeasurementResult,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClearRegisterRequest {
+    slot: RegisterSlot,
+}
+
 /// Runtime state for an actively connected meter.
 struct ActiveMeter {
     instrument_id: String,
@@ -49,6 +60,7 @@ pub struct MeterModule {
     ctx: Option<ModuleContext>,
     active_meters: HashMap<String, ActiveMeter>,
     continuous_reads: HashMap<String, ContinuousReadState>,
+    registers: Arc<Mutex<HashMap<RegisterSlot, MeasurementResult>>>,
 }
 
 impl MeterModule {
@@ -57,6 +69,7 @@ impl MeterModule {
             ctx: None,
             active_meters: HashMap::new(),
             continuous_reads: HashMap::new(),
+            registers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -169,6 +182,12 @@ impl MeterModule {
             active.instrument_model.clone(),
         );
 
+        // Auto-populate Current register silently (no event).
+        self.registers
+            .lock()
+            .unwrap()
+            .insert(RegisterSlot::Current, result.clone());
+
         self.event_bus().publish(ModuleEvent::MeasurementReceived {
             meter_id: meter_id.to_string(),
             measurement: result.clone(),
@@ -184,8 +203,7 @@ impl MeterModule {
         let active = self
             .active_meters
             .get(&req.meter_id)
-            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?
-            .clone();
+            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
 
         if self.continuous_reads.contains_key(&req.meter_id) {
             return Err(CommandError::ExecutionFailed(
@@ -197,7 +215,9 @@ impl MeterModule {
         let child_token = cancel_token.child_token();
         let meter_id = req.meter_id.clone();
         let event_bus = self.event_bus();
+        let registers = Arc::clone(&self.registers);
         let interval_ms = req.interval_ms;
+        let active = active.clone();
 
         let handle = tokio::spawn(async move {
             continuous_read_loop(
@@ -206,6 +226,7 @@ impl MeterModule {
                 active.instrument_model,
                 active.driver,
                 event_bus,
+                registers,
                 interval_ms,
                 child_token,
             )
@@ -237,6 +258,42 @@ impl MeterModule {
         state.cancel_token.cancel();
 
         Ok(serde_json::json!({ "status": "stopped" }))
+    }
+
+    fn cmd_set_register(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: SetRegisterRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        self.registers
+            .lock()
+            .unwrap()
+            .insert(req.slot, req.measurement.clone());
+
+        self.event_bus().publish(ModuleEvent::RegisterChanged {
+            slot: req.slot,
+            measurement: Some(req.measurement),
+        });
+
+        Ok(Value::Null)
+    }
+
+    fn cmd_clear_register(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: ClearRegisterRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        self.registers.lock().unwrap().remove(&req.slot);
+
+        self.event_bus().publish(ModuleEvent::RegisterChanged {
+            slot: req.slot,
+            measurement: None,
+        });
+
+        Ok(Value::Null)
+    }
+
+    fn cmd_get_all_registers(&self) -> Result<Value, CommandError> {
+        let map = self.registers.lock().unwrap().clone();
+        Ok(serde_json::to_value(map).unwrap())
     }
 }
 
@@ -304,10 +361,26 @@ impl CalibrationModule for MeterModule {
                 name: "stop_continuous",
                 description: "Stop continuous measurement",
             },
+            ModuleCommandDef {
+                name: "set_register",
+                description: "Store a measurement into a register slot",
+            },
+            ModuleCommandDef {
+                name: "clear_register",
+                description: "Clear a register slot",
+            },
+            ModuleCommandDef {
+                name: "get_all_registers",
+                description: "Return all populated registers",
+            },
         ]
     }
 
-    fn handle_command(&mut self, cmd: &str, payload: Value) -> Result<Value, CommandError> {
+    fn handle_command(
+        &mut self,
+        cmd: &str,
+        payload: Value,
+    ) -> Result<Value, CommandError> {
         match cmd {
             "detect" => self.cmd_detect(),
             "connect" => self.cmd_connect(payload),
@@ -315,6 +388,9 @@ impl CalibrationModule for MeterModule {
             "read" => self.cmd_read(payload),
             "read_continuous" => self.cmd_read_continuous(payload),
             "stop_continuous" => self.cmd_stop_continuous(payload),
+            "set_register" => self.cmd_set_register(payload),
+            "clear_register" => self.cmd_clear_register(payload),
+            "get_all_registers" => self.cmd_get_all_registers(),
             _ => Err(CommandError::UnknownCommand(cmd.to_string())),
         }
     }
@@ -326,6 +402,7 @@ async fn continuous_read_loop(
     instrument_model: String,
     driver: Arc<Mutex<Box<dyn Meter>>>,
     event_bus: Arc<EventBus>,
+    registers: Arc<Mutex<HashMap<RegisterSlot, MeasurementResult>>>,
     interval_ms: u32,
     cancel_token: CancellationToken,
 ) {
@@ -356,6 +433,8 @@ async fn continuous_read_loop(
                             &instrument_id,
                             &instrument_model,
                         );
+                        // Auto-populate Current register silently (no event).
+                        registers.lock().unwrap().insert(RegisterSlot::Current, measurement.clone());
                         event_bus.publish(ModuleEvent::MeasurementReceived {
                             meter_id: meter_id.clone(),
                             measurement,
