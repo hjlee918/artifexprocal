@@ -173,3 +173,418 @@ async fn meter_module_planckian_sweep() {
         )
         .expect("disconnect should succeed");
 }
+
+#[tokio::test]
+async fn read_emits_measurement_received() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({ "instrument_id": "fake-meter-1" }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive event")
+        .expect("channel should be open");
+
+    assert!(
+        matches!(event, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        event
+    );
+}
+
+#[tokio::test]
+async fn read_continuous_sequence_success() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let xyz1 = color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 };
+    let xyz2 = color_science::types::Xyz { x: 11.0, y: 21.0, z: 31.0 };
+    let xyz3 = color_science::types::Xyz { x: 12.0, y: 22.0, z: 32.0 };
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "Sequence": {
+                        "values": [
+                            { "Ok": xyz1 },
+                            { "Ok": xyz2 },
+                            { "Ok": xyz3 }
+                        ],
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    for i in 0..3 {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect(&format!("should receive measurement {}", i))
+            .expect("channel open");
+        assert!(
+            matches!(event, app_core::ModuleEvent::MeasurementReceived { .. }),
+            "expected MeasurementReceived at index {}, got {:?}",
+            i,
+            event
+        );
+    }
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive stopped event")
+        .expect("channel open");
+    assert!(
+        matches!(
+            event,
+            app_core::ModuleEvent::ContinuousReadStopped {
+                reason: app_core::ContinuousReadStopReason::SequenceExhausted,
+                ..
+            }
+        ),
+        "expected SequenceExhausted, got {:?}",
+        event
+    );
+}
+
+#[tokio::test]
+async fn read_continuous_three_error_tolerance() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "Sequence": {
+                        "values": [
+                            { "Err": { "Timeout": null } },
+                            { "Err": { "Timeout": null } },
+                            { "Err": { "Timeout": null } },
+                            { "Err": { "Timeout": null } }
+                        ],
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    for expected_count in 1..=3 {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect(&format!("should receive error {}", expected_count))
+            .expect("channel open");
+        assert!(
+            matches!(
+                event,
+                app_core::ModuleEvent::ContinuousReadError { consecutive_count, .. }
+                if consecutive_count == expected_count
+            ),
+            "expected ContinuousReadError with count {}, got {:?}",
+            expected_count,
+            event
+        );
+    }
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive stopped event")
+        .expect("channel open");
+    assert!(
+        matches!(
+            event,
+            app_core::ModuleEvent::ContinuousReadStopped {
+                reason: app_core::ContinuousReadStopReason::ErrorToleranceExceeded,
+                ..
+            }
+        ),
+        "expected ErrorToleranceExceeded, got {:?}",
+        event
+    );
+}
+
+#[tokio::test]
+async fn read_continuous_mixed_errors() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let xyz = color_science::types::Xyz { x: 10.0, y: 20.0, z: 30.0 };
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "Sequence": {
+                        "values": [
+                            { "Ok": xyz },
+                            { "Err": { "Timeout": null } },
+                            { "Ok": xyz },
+                            { "Err": { "Timeout": null } },
+                            { "Ok": xyz }
+                        ],
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    let e1 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(e1, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        e1
+    );
+
+    let e2 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(
+            e2,
+            app_core::ModuleEvent::ContinuousReadError { consecutive_count: 1, .. }
+        ),
+        "expected ContinuousReadError count=1, got {:?}",
+        e2
+    );
+
+    let e3 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(e3, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        e3
+    );
+
+    let e4 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(
+            e4,
+            app_core::ModuleEvent::ContinuousReadError { consecutive_count: 1, .. }
+        ),
+        "expected ContinuousReadError count=1, got {:?}",
+        e4
+    );
+
+    let e5 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(e5, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        e5
+    );
+
+    let e6 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(
+            e6,
+            app_core::ModuleEvent::ContinuousReadStopped {
+                reason: app_core::ContinuousReadStopReason::SequenceExhausted,
+                ..
+            }
+        ),
+        "expected SequenceExhausted, got {:?}",
+        e6
+    );
+}
+
+#[tokio::test]
+async fn stop_continuous_mid_sequence() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    let e1 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(e1, app_core::ModuleEvent::MeasurementReceived { .. }),
+        "expected MeasurementReceived, got {:?}",
+        e1
+    );
+
+    module
+        .handle_command(
+            "stop_continuous",
+            serde_json::json!({ "meter_id": meter_id }),
+        )
+        .unwrap();
+
+    let e2 = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(
+            e2,
+            app_core::ModuleEvent::ContinuousReadStopped {
+                reason: app_core::ContinuousReadStopReason::Cancelled,
+                ..
+            }
+        ),
+        "expected Cancelled, got {:?}",
+        e2
+    );
+
+    let maybe_event = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
+    assert!(
+        maybe_event.is_err(),
+        "expected no further events after stop, got {:?}",
+        maybe_event
+    );
+}
+
+#[tokio::test]
+async fn single_read_rejected_during_continuous() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    let err = module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .expect_err("single read should be rejected during continuous read");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("rejected") || msg.contains("continuous"),
+        "expected rejection message, got: {}",
+        msg
+    );
+
+    module
+        .handle_command(
+            "stop_continuous",
+            serde_json::json!({ "meter_id": meter_id }),
+        )
+        .unwrap();
+}

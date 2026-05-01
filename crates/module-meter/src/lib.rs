@@ -1,14 +1,16 @@
 //! module-meter — MeterModule CalibrationModule implementation.
 
 use app_core::{
-    CalibrationModule, CommandError, ModuleCapability, ModuleCommandDef, ModuleContext,
-    ModuleError,
+    CalibrationModule, CommandError, ContinuousReadStopReason, EventBus, ModuleCapability,
+    ModuleCommandDef, ModuleContext, ModuleError, ModuleEvent,
 };
 use color_science::measurement::MeasurementResult;
 use hal::meter::Meter;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Deserialize)]
 struct ConnectRequest {
@@ -16,12 +18,29 @@ struct ConnectRequest {
     fake_meter_config: Option<hal_meters::FakeMeterConfig>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReadContinuousRequest {
+    meter_id: String,
+    interval_ms: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct StopContinuousRequest {
+    meter_id: String,
+}
+
 /// Runtime state for an actively connected meter.
 struct ActiveMeter {
-    #[allow(dead_code)]
     instrument_id: String,
     instrument_model: String,
-    driver: Box<dyn Meter>,
+    driver: Arc<Mutex<Box<dyn Meter>>>,
+}
+
+/// State for a running continuous read loop.
+struct ContinuousReadState {
+    cancel_token: CancellationToken,
+    #[allow(dead_code)]
+    handle: tokio::task::JoinHandle<()>,
 }
 
 /// MeterModule — implements CalibrationModule for instrument discovery,
@@ -29,6 +48,7 @@ struct ActiveMeter {
 pub struct MeterModule {
     ctx: Option<ModuleContext>,
     active_meters: HashMap<String, ActiveMeter>,
+    continuous_reads: HashMap<String, ContinuousReadState>,
 }
 
 impl MeterModule {
@@ -36,7 +56,16 @@ impl MeterModule {
         Self {
             ctx: None,
             active_meters: HashMap::new(),
+            continuous_reads: HashMap::new(),
         }
+    }
+
+    fn event_bus(&self) -> Arc<EventBus> {
+        self.ctx
+            .as_ref()
+            .expect("module not initialized")
+            .event_bus
+            .clone()
     }
 
     fn cmd_detect(&self) -> Result<Value, CommandError> {
@@ -76,7 +105,7 @@ impl MeterModule {
             ActiveMeter {
                 instrument_id: req.instrument_id,
                 instrument_model: "FakeMeter".to_string(),
-                driver,
+                driver: Arc::new(Mutex::new(driver)),
             },
         );
 
@@ -89,13 +118,20 @@ impl MeterModule {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidPayload("missing meter_id".to_string()))?;
 
-        let mut active = self
+        // Cancel any active continuous read (fire-and-forget).
+        if let Some(state) = self.continuous_reads.remove(meter_id) {
+            state.cancel_token.cancel();
+        }
+
+        let active = self
             .active_meters
             .remove(meter_id)
             .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
 
         active
             .driver
+            .lock()
+            .unwrap()
             .disconnect()
             .map_err(|e| CommandError::ExecutionFailed(e.to_string()))?;
 
@@ -108,13 +144,21 @@ impl MeterModule {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidPayload("missing meter_id".to_string()))?;
 
+        if self.continuous_reads.contains_key(meter_id) {
+            return Err(CommandError::ExecutionFailed(
+                "single read rejected while continuous read is active".to_string(),
+            ));
+        }
+
         let active = self
             .active_meters
-            .get_mut(meter_id)
+            .get(meter_id)
             .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
 
         let xyz = active
             .driver
+            .lock()
+            .unwrap()
             .read_xyz()
             .map_err(|e| CommandError::ExecutionFailed(e.to_string()))?;
 
@@ -125,7 +169,84 @@ impl MeterModule {
             active.instrument_model.clone(),
         );
 
+        self.event_bus().publish(ModuleEvent::MeasurementReceived {
+            meter_id: meter_id.to_string(),
+            measurement: result.clone(),
+        });
+
         Ok(serde_json::to_value(result).unwrap())
+    }
+
+    fn cmd_read_continuous(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: ReadContinuousRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        let active = self
+            .active_meters
+            .get(&req.meter_id)
+            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?
+            .clone();
+
+        if self.continuous_reads.contains_key(&req.meter_id) {
+            return Err(CommandError::ExecutionFailed(
+                "continuous read already active".to_string(),
+            ));
+        }
+
+        let cancel_token = CancellationToken::new();
+        let child_token = cancel_token.child_token();
+        let meter_id = req.meter_id.clone();
+        let event_bus = self.event_bus();
+        let interval_ms = req.interval_ms;
+
+        let handle = tokio::spawn(async move {
+            continuous_read_loop(
+                meter_id,
+                active.instrument_id,
+                active.instrument_model,
+                active.driver,
+                event_bus,
+                interval_ms,
+                child_token,
+            )
+            .await;
+        });
+
+        self.continuous_reads.insert(
+            req.meter_id,
+            ContinuousReadState {
+                cancel_token,
+                handle,
+            },
+        );
+
+        Ok(serde_json::json!({ "status": "started" }))
+    }
+
+    fn cmd_stop_continuous(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: StopContinuousRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        let state = self
+            .continuous_reads
+            .remove(&req.meter_id)
+            .ok_or_else(|| CommandError::ExecutionFailed(
+                "no continuous read active for meter".to_string(),
+            ))?;
+
+        state.cancel_token.cancel();
+
+        Ok(serde_json::json!({ "status": "stopped" }))
+    }
+}
+
+impl Clone for ActiveMeter {
+    fn clone(&self) -> Self {
+        Self {
+            instrument_id: self.instrument_id.clone(),
+            instrument_model: self.instrument_model.clone(),
+            driver: Arc::clone(&self.driver),
+        }
     }
 }
 
@@ -175,6 +296,14 @@ impl CalibrationModule for MeterModule {
                 name: "read",
                 description: "Take a single measurement",
             },
+            ModuleCommandDef {
+                name: "read_continuous",
+                description: "Start continuous measurement",
+            },
+            ModuleCommandDef {
+                name: "stop_continuous",
+                description: "Stop continuous measurement",
+            },
         ]
     }
 
@@ -184,7 +313,86 @@ impl CalibrationModule for MeterModule {
             "connect" => self.cmd_connect(payload),
             "disconnect" => self.cmd_disconnect(payload),
             "read" => self.cmd_read(payload),
+            "read_continuous" => self.cmd_read_continuous(payload),
+            "stop_continuous" => self.cmd_stop_continuous(payload),
             _ => Err(CommandError::UnknownCommand(cmd.to_string())),
+        }
+    }
+}
+
+async fn continuous_read_loop(
+    meter_id: String,
+    instrument_id: String,
+    instrument_model: String,
+    driver: Arc<Mutex<Box<dyn Meter>>>,
+    event_bus: Arc<EventBus>,
+    interval_ms: u32,
+    cancel_token: CancellationToken,
+) {
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval_ms as u64));
+    let mut consecutive_errors: u32 = 0;
+
+    loop {
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                event_bus.publish(ModuleEvent::ContinuousReadStopped {
+                    meter_id: meter_id.clone(),
+                    reason: ContinuousReadStopReason::Cancelled,
+                });
+                break;
+            }
+            _ = interval.tick() => {
+                let result = {
+                    let mut guard = driver.lock().unwrap();
+                    guard.read_xyz()
+                };
+
+                match result {
+                    Ok(xyz) => {
+                        consecutive_errors = 0;
+                        let measurement = MeasurementResult::from_xyz(
+                            xyz,
+                            &meter_id,
+                            &instrument_id,
+                            &instrument_model,
+                        );
+                        event_bus.publish(ModuleEvent::MeasurementReceived {
+                            meter_id: meter_id.clone(),
+                            measurement,
+                        });
+                    }
+                    Err(e) => {
+                        consecutive_errors += 1;
+
+                        if !e.is_transient() {
+                            let reason = if matches!(e, hal::meter::MeterError::SequenceExhausted) {
+                                ContinuousReadStopReason::SequenceExhausted
+                            } else {
+                                ContinuousReadStopReason::FatalError(e.to_string())
+                            };
+                            event_bus.publish(ModuleEvent::ContinuousReadStopped {
+                                meter_id: meter_id.clone(),
+                                reason,
+                            });
+                            break;
+                        }
+
+                        if consecutive_errors > 3 {
+                            event_bus.publish(ModuleEvent::ContinuousReadStopped {
+                                meter_id: meter_id.clone(),
+                                reason: ContinuousReadStopReason::ErrorToleranceExceeded,
+                            });
+                            break;
+                        }
+
+                        event_bus.publish(ModuleEvent::ContinuousReadError {
+                            meter_id: meter_id.clone(),
+                            error: e.to_string(),
+                            consecutive_count: consecutive_errors,
+                        });
+                    }
+                }
+            }
         }
     }
 }

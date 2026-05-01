@@ -2,10 +2,20 @@
 //!
 //! Uses tokio::sync::broadcast for fan-out event delivery.
 
+use color_science::measurement::MeasurementResult;
 use tokio::sync::broadcast;
 
 /// Default channel capacity for the event bus.
 const DEFAULT_CAPACITY: usize = 256;
+
+/// Reason why a continuous read loop stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContinuousReadStopReason {
+    Cancelled,
+    ErrorToleranceExceeded,
+    SequenceExhausted,
+    FatalError(String),
+}
 
 /// Events emitted by modules and the application core.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +35,22 @@ pub enum ModuleEvent {
     Error {
         source: String,
         message: String,
+    },
+    /// A single measurement was received (from read or continuous stream).
+    MeasurementReceived {
+        meter_id: String,
+        measurement: MeasurementResult,
+    },
+    /// A transient error occurred during continuous read.
+    ContinuousReadError {
+        meter_id: String,
+        error: String,
+        consecutive_count: u32,
+    },
+    /// The continuous read loop stopped.
+    ContinuousReadStopped {
+        meter_id: String,
+        reason: ContinuousReadStopReason,
     },
 }
 
@@ -99,5 +125,30 @@ mod tests {
         let r2 = rx2.recv().await.expect("rx2 should receive");
         assert_eq!(r1, event);
         assert_eq!(r2, event);
+    }
+
+    #[tokio::test]
+    async fn event_bus_delivers_measurement_received() {
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+
+        let measurement = MeasurementResult::from_xyz(
+            color_science::types::Xyz {
+                x: 95.047,
+                y: 100.0,
+                z: 108.883,
+            },
+            "meter-1",
+            "fake-1",
+            "FakeMeter",
+        );
+        let event = ModuleEvent::MeasurementReceived {
+            meter_id: "meter-1".to_string(),
+            measurement,
+        };
+        bus.publish(event.clone());
+
+        let received = rx.recv().await.expect("should receive event");
+        assert_eq!(received, event);
     }
 }

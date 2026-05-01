@@ -7,7 +7,7 @@ pub mod module;
 pub mod settings;
 
 pub use errors::{CommandError, ModuleError};
-pub use event_bus::{EventBus, ModuleEvent};
+pub use event_bus::{ContinuousReadStopReason, EventBus, ModuleEvent};
 pub use inventory::DeviceInventory;
 pub use module::{CalibrationModule, ModuleCapability, ModuleCommandDef, ModuleContext};
 pub use settings::SettingsStore;

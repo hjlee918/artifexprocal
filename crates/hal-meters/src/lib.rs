@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 pub enum FakeMeterConfig {
     /// Return a fixed XYZ on every read.
     Hardcoded(Xyz),
-    /// Replay a sequence of XYZ values.
+    /// Replay a sequence of XYZ values or errors.
     Sequence {
-        values: Vec<Xyz>,
+        values: Vec<Result<Xyz, MeterError>>,
         /// If true, wrap to index 0 after exhausting `values`.
         /// If false, return `MeterError::SequenceExhausted`.
         loop_at_end: bool,
@@ -82,9 +82,9 @@ impl Meter for FakeMeter {
                         return Err(MeterError::SequenceExhausted);
                     }
                 }
-                let xyz = values[self.sequence_index];
+                let result = values[self.sequence_index].clone();
                 self.sequence_index += 1;
-                Ok(xyz)
+                result
             }
             FakeMeterConfig::PlanckianSweep {
                 start_cct,
@@ -145,7 +145,7 @@ mod tests {
         let xyz1 = Xyz { x: 10.0, y: 20.0, z: 30.0 };
         let xyz2 = Xyz { x: 11.0, y: 21.0, z: 31.0 };
         let config = FakeMeterConfig::Sequence {
-            values: vec![xyz1, xyz2],
+            values: vec![Ok(xyz1), Ok(xyz2)],
             loop_at_end: false,
         };
         let mut meter = FakeMeter::with_config(config).unwrap();
@@ -159,13 +159,28 @@ mod tests {
         let xyz1 = Xyz { x: 10.0, y: 20.0, z: 30.0 };
         let xyz2 = Xyz { x: 11.0, y: 21.0, z: 31.0 };
         let config = FakeMeterConfig::Sequence {
-            values: vec![xyz1, xyz2],
+            values: vec![Ok(xyz1), Ok(xyz2)],
             loop_at_end: true,
         };
         let mut meter = FakeMeter::with_config(config).unwrap();
         assert_eq!(meter.read_xyz().unwrap(), xyz1);
         assert_eq!(meter.read_xyz().unwrap(), xyz2);
         assert_eq!(meter.read_xyz().unwrap(), xyz1); // wrap
+        assert_eq!(meter.read_xyz().unwrap(), xyz2);
+    }
+
+    #[test]
+    fn sequence_injected_error() {
+        let xyz1 = Xyz { x: 10.0, y: 20.0, z: 30.0 };
+        let injected = MeterError::Other("injected".to_string());
+        let xyz2 = Xyz { x: 11.0, y: 21.0, z: 31.0 };
+        let config = FakeMeterConfig::Sequence {
+            values: vec![Ok(xyz1), Err(injected.clone()), Ok(xyz2)],
+            loop_at_end: false,
+        };
+        let mut meter = FakeMeter::with_config(config).unwrap();
+        assert_eq!(meter.read_xyz().unwrap(), xyz1);
+        assert_eq!(meter.read_xyz(), Err(injected));
         assert_eq!(meter.read_xyz().unwrap(), xyz2);
     }
 

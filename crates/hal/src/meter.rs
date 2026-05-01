@@ -1,10 +1,11 @@
 //! Meter trait — colorimeter and spectrophotometer abstraction.
 
 use color_science::types::Xyz;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Error type for meter operations.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MeterError {
     Disconnected,
     Timeout,
@@ -37,7 +38,57 @@ impl fmt::Display for MeterError {
     }
 }
 
-impl std::error::Error for MeterError {}
+impl MeterError {
+    /// Returns true if this error is transient and may resolve on retry.
+    ///
+    /// Note: `SequenceExhausted` returns `false` because it is a clean
+    /// terminal condition, not an error. Call sites that need to distinguish
+    /// terminal exhaustion from fatal errors should match on the variant
+    /// directly after checking `!is_transient()`.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            MeterError::Disconnected => true,
+            MeterError::Timeout => true,
+            MeterError::Saturated => true,
+            MeterError::NoOutput => true,
+            MeterError::JoinError(_) => true,
+            MeterError::Other(_) => true,
+            MeterError::SequenceExhausted => false,
+            MeterError::UnlockFailed => false,
+            MeterError::NotInstalled => false,
+            MeterError::CalibrationRequired => false,
+            MeterError::InvalidMode => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transient_errors_classified() {
+        assert!(MeterError::Disconnected.is_transient());
+        assert!(MeterError::Timeout.is_transient());
+        assert!(MeterError::Saturated.is_transient());
+        assert!(MeterError::NoOutput.is_transient());
+        assert!(MeterError::JoinError("x".into()).is_transient());
+        assert!(MeterError::Other("x".into()).is_transient());
+    }
+
+    #[test]
+    fn fatal_errors_not_transient() {
+        assert!(!MeterError::UnlockFailed.is_transient());
+        assert!(!MeterError::NotInstalled.is_transient());
+        assert!(!MeterError::CalibrationRequired.is_transient());
+        assert!(!MeterError::InvalidMode.is_transient());
+    }
+
+    #[test]
+    fn sequence_exhausted_not_transient() {
+        assert!(!MeterError::SequenceExhausted.is_transient());
+    }
+}
 
 /// Measurement mode for meters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

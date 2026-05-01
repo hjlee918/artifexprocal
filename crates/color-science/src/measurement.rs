@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A single colorimetric measurement from any supported instrument.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MeasurementResult {
     /// UUID v4 assigned at measurement time; stable across re-exports.
     pub measurement_uuid: Uuid,
