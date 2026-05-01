@@ -8,9 +8,11 @@ use color_science::measurement::MeasurementResult;
 use hal::meter::Meter;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
+
+pub mod export;
 
 #[derive(Debug, Deserialize)]
 struct ConnectRequest {
@@ -61,6 +63,7 @@ pub struct MeterModule {
     active_meters: HashMap<String, ActiveMeter>,
     continuous_reads: HashMap<String, ContinuousReadState>,
     registers: Arc<Mutex<HashMap<RegisterSlot, MeasurementResult>>>,
+    history: Arc<Mutex<VecDeque<MeasurementResult>>>,
 }
 
 impl MeterModule {
@@ -70,6 +73,7 @@ impl MeterModule {
             active_meters: HashMap::new(),
             continuous_reads: HashMap::new(),
             registers: Arc::new(Mutex::new(HashMap::new())),
+            history: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
 
@@ -188,6 +192,8 @@ impl MeterModule {
             .unwrap()
             .insert(RegisterSlot::Current, result.clone());
 
+        export::push_history(&mut self.history.lock().unwrap(), result.clone());
+
         self.event_bus().publish(ModuleEvent::MeasurementReceived {
             meter_id: meter_id.to_string(),
             measurement: result.clone(),
@@ -216,6 +222,7 @@ impl MeterModule {
         let meter_id = req.meter_id.clone();
         let event_bus = self.event_bus();
         let registers = Arc::clone(&self.registers);
+        let history = Arc::clone(&self.history);
         let interval_ms = req.interval_ms;
         let active = active.clone();
 
@@ -227,6 +234,7 @@ impl MeterModule {
                 active.driver,
                 event_bus,
                 registers,
+                history,
                 interval_ms,
                 child_token,
             )
@@ -294,6 +302,25 @@ impl MeterModule {
     fn cmd_get_all_registers(&self) -> Result<Value, CommandError> {
         let map = self.registers.lock().unwrap().clone();
         Ok(serde_json::to_value(map).unwrap())
+    }
+
+    fn cmd_export_json(&self) -> Result<Value, CommandError> {
+        let mut history = self.history.lock().unwrap();
+        let json = export::export_json(history.make_contiguous())
+            .map_err(|e| CommandError::ExecutionFailed(format!("export json failed: {}", e)))?;
+        Ok(serde_json::json!({ "json": json }))
+    }
+
+    fn cmd_export_csv(&self) -> Result<Value, CommandError> {
+        let mut history = self.history.lock().unwrap();
+        let csv = export::export_csv(history.make_contiguous())
+            .map_err(|e| CommandError::ExecutionFailed(format!("export csv failed: {}", e)))?;
+        Ok(serde_json::json!({ "csv": csv }))
+    }
+
+    fn cmd_clear_history(&mut self) -> Result<Value, CommandError> {
+        self.history.lock().unwrap().clear();
+        Ok(Value::Null)
     }
 }
 
@@ -373,6 +400,18 @@ impl CalibrationModule for MeterModule {
                 name: "get_all_registers",
                 description: "Return all populated registers",
             },
+            ModuleCommandDef {
+                name: "export_json",
+                description: "Export measurement history as JSON",
+            },
+            ModuleCommandDef {
+                name: "export_csv",
+                description: "Export measurement history as CSV",
+            },
+            ModuleCommandDef {
+                name: "clear_history",
+                description: "Clear measurement history",
+            },
         ]
     }
 
@@ -391,6 +430,9 @@ impl CalibrationModule for MeterModule {
             "set_register" => self.cmd_set_register(payload),
             "clear_register" => self.cmd_clear_register(payload),
             "get_all_registers" => self.cmd_get_all_registers(),
+            "export_json" => self.cmd_export_json(),
+            "export_csv" => self.cmd_export_csv(),
+            "clear_history" => self.cmd_clear_history(),
             _ => Err(CommandError::UnknownCommand(cmd.to_string())),
         }
     }
@@ -403,6 +445,7 @@ async fn continuous_read_loop(
     driver: Arc<Mutex<Box<dyn Meter>>>,
     event_bus: Arc<EventBus>,
     registers: Arc<Mutex<HashMap<RegisterSlot, MeasurementResult>>>,
+    history: Arc<Mutex<VecDeque<MeasurementResult>>>,
     interval_ms: u32,
     cancel_token: CancellationToken,
 ) {
@@ -435,6 +478,7 @@ async fn continuous_read_loop(
                         );
                         // Auto-populate Current register silently (no event).
                         registers.lock().unwrap().insert(RegisterSlot::Current, measurement.clone());
+                        export::push_history(&mut history.lock().unwrap(), measurement.clone());
                         event_bus.publish(ModuleEvent::MeasurementReceived {
                             meter_id: meter_id.clone(),
                             measurement,

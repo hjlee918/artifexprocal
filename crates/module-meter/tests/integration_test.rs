@@ -925,3 +925,169 @@ async fn no_register_changed_on_read() {
         maybe
     );
 }
+
+// ── Export / History tests ───────────────────────────────────────
+
+#[tokio::test]
+async fn read_populates_history() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let json_export = module
+        .handle_command("export_json", serde_json::json!({}))
+        .unwrap();
+    let json_str = json_export["json"].as_str().unwrap();
+    let arr: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["instrument"]["model"], "FakeMeter");
+
+    let csv_export = module
+        .handle_command("export_csv", serde_json::json!({}))
+        .unwrap();
+    let csv_str = csv_export["csv"].as_str().unwrap();
+    let lines: Vec<&str> = csv_str.lines().collect();
+    assert_eq!(lines.len(), 2, "expected header + 1 data row");
+    assert!(lines[0].starts_with("measurement_uuid"));
+}
+
+#[tokio::test]
+async fn clear_history_empties_export() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    module
+        .handle_command("clear_history", serde_json::json!({}))
+        .unwrap();
+
+    let json_export = module
+        .handle_command("export_json", serde_json::json!({}))
+        .unwrap();
+    let json_str = json_export["json"].as_str().unwrap();
+    let arr: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+    assert!(arr.is_empty());
+}
+
+#[tokio::test]
+async fn history_fifo_eviction() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    // Take 1002 reads (cap is 1000).
+    for _ in 0..1002 {
+        module
+            .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+            .unwrap();
+    }
+
+    let json_export = module
+        .handle_command("export_json", serde_json::json!({}))
+        .unwrap();
+    let json_str = json_export["json"].as_str().unwrap();
+    let arr: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap();
+    assert_eq!(arr.len(), 1000, "history should cap at 1000");
+}
+
+#[tokio::test]
+async fn export_json_validates_against_schema() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let json_export = module
+        .handle_command("export_json", serde_json::json!({}))
+        .unwrap();
+    let json_str = json_export["json"].as_str().unwrap();
+
+    module_meter::export::validate_export_json(json_str)
+        .expect("exported JSON should validate against Phase 1 schema");
+}
+
+#[tokio::test]
+async fn export_csv_round_trip() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let csv_export = module
+        .handle_command("export_csv", serde_json::json!({}))
+        .unwrap();
+    let csv_str = csv_export["csv"].as_str().unwrap();
+
+    let mut rdr = csv::Reader::from_reader(csv_str.as_bytes());
+    let headers: Vec<String> = rdr.headers().unwrap().iter().map(|s| s.to_string()).collect();
+    assert!(headers.contains(&"measurement_uuid".to_string()));
+    assert!(headers.contains(&"cct".to_string()));
+    assert!(headers.contains(&"duv".to_string()));
+
+    let records: Vec<csv::StringRecord> = rdr.records().map(|r| r.unwrap()).collect();
+    assert_eq!(records.len(), 1);
+
+    // Verify cct and duv are non-empty (computed at construction time).
+    let cct_idx = headers.iter().position(|h| h == "cct").unwrap();
+    let duv_idx = headers.iter().position(|h| h == "duv").unwrap();
+    assert!(!records[0][cct_idx].is_empty(), "cct should be populated");
+    assert!(!records[0][duv_idx].is_empty(), "duv should be populated");
+}
