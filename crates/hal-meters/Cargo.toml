@@ -7,5 +7,7 @@ license.workspace = true
 description = "Meter driver implementations (i1 Display Pro, i1 Pro 2, ArgyllCMS)"
 
 [dependencies]
+hal = { path = "../hal" }
+color-science = { path = "../color-science" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
