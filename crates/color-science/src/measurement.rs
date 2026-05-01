@@ -122,6 +122,7 @@ impl MeasurementResult {
         let lch: LCh = lab.into();
         let uv_prime = crate::conversion::xyz_to_uv_prime(xyz);
         let ictcp = Some(crate::conversion::xyz_to_ictcp(xyz));
+        let (cct, duv) = crate::cct::xyz_to_cct_duv(xyz);
 
         MeasurementResult {
             measurement_uuid: Uuid::new_v4(),
@@ -137,8 +138,8 @@ impl MeasurementResult {
             lch,
             uv_prime,
             ictcp,
-            cct: None,
-            duv: None,
+            cct: Some(cct),
+            duv: Some(duv),
             target_xy: None,
             delta_e_2000: None,
             delta_e_76: None,
