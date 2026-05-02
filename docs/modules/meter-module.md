@@ -1164,7 +1164,9 @@ This section defines the exact CSV and JSON export schemas shipped in Phase 1. F
 
 **RFC 4180 compliant.** Header row is mandatory. Missing numeric values are represented as empty fields (`,,`). Free-text fields (label, instrument_model) are double-quoted if they contain commas or newlines. `""` is used to escape literal quotes per RFC 4180.
 
-**Column order (fixed):**
+**Column order (fixed, 34 columns):**
+
+<!-- Count must match the enumerated field list below. Update both together when columns change. -->
 
 ```
 measurement_uuid,schema_version,software_version,timestamp,mode,instrument_model,instrument_id,
