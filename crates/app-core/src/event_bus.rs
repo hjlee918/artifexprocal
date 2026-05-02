@@ -58,6 +58,11 @@ pub enum ModuleEvent {
         slot: RegisterSlot,
         measurement: Option<MeasurementResult>,
     },
+    /// Meter configuration was changed.
+    ConfigChanged {
+        meter_id: String,
+        config: hal::meter::MeterConfig,
+    },
 }
 
 /// Fan-out event bus using tokio broadcast channels.
@@ -176,6 +181,25 @@ mod tests {
         let event = ModuleEvent::RegisterChanged {
             slot: RegisterSlot::Reference,
             measurement: Some(measurement),
+        };
+        bus.publish(event.clone());
+
+        let received = rx.recv().await.expect("should receive event");
+        assert_eq!(received, event);
+    }
+
+    #[tokio::test]
+    async fn event_bus_delivers_config_changed() {
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+
+        let event = ModuleEvent::ConfigChanged {
+            meter_id: "meter-1".to_string(),
+            config: hal::meter::MeterConfig {
+                mode: hal::meter::MeasurementMode::Ambient,
+                averaging_count: 3,
+                integration_time_ms: Some(250),
+            },
         };
         bus.publish(event.clone());
 

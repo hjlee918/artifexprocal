@@ -4,8 +4,9 @@ use app_core::{
     CalibrationModule, CommandError, ContinuousReadStopReason, EventBus, ModuleCapability,
     ModuleCommandDef, ModuleContext, ModuleError, ModuleEvent, RegisterSlot,
 };
+use chrono::{DateTime, Utc};
 use color_science::measurement::MeasurementResult;
-use hal::meter::Meter;
+use hal::meter::{Meter, MeterConfig};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
@@ -42,10 +43,32 @@ struct ClearRegisterRequest {
     slot: RegisterSlot,
 }
 
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct ListActiveRequest {}
+
+#[derive(Debug, Deserialize)]
+struct ProbeRequest {
+    meter_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetConfigRequest {
+    meter_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SetConfigRequest {
+    meter_id: String,
+    config: MeterConfig,
+}
+
 /// Runtime state for an actively connected meter.
 struct ActiveMeter {
     instrument_id: String,
     instrument_model: String,
+    connected_at_utc: DateTime<Utc>,
+    config: MeterConfig,
     driver: Arc<Mutex<Box<dyn Meter>>>,
 }
 
@@ -122,6 +145,8 @@ impl MeterModule {
             ActiveMeter {
                 instrument_id: req.instrument_id,
                 instrument_model: "FakeMeter".to_string(),
+                connected_at_utc: Utc::now(),
+                config: MeterConfig::default(),
                 driver: Arc::new(Mutex::new(driver)),
             },
         );
@@ -322,6 +347,88 @@ impl MeterModule {
         self.history.lock().unwrap().clear();
         Ok(Value::Null)
     }
+
+    fn cmd_list_active(&self) -> Result<Value, CommandError> {
+        let meters: Vec<serde_json::Value> = self
+            .active_meters
+            .iter()
+            .map(|(meter_id, active)| {
+                let is_continuous_active = self.continuous_reads.contains_key(meter_id);
+                serde_json::json!({
+                    "meter_id": meter_id,
+                    "instrument_model": active.instrument_model,
+                    "instrument_serial": active.instrument_id, // Phase 1: fallback to instrument_id
+                    "connected_at_utc": active.connected_at_utc.to_rfc3339(),
+                    "mode": format!("{:?}", active.config.mode),
+                    "is_continuous_active": is_continuous_active,
+                })
+            })
+            .collect();
+        Ok(serde_json::json!({ "meters": meters }))
+    }
+
+    fn cmd_probe(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: ProbeRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        let active = self
+            .active_meters
+            .get(&req.meter_id)
+            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
+
+        let result = active
+            .driver
+            .lock()
+            .unwrap()
+            .probe()
+            .map_err(|e| CommandError::ExecutionFailed(e.to_string()))?;
+
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    fn cmd_get_config(&self, payload: Value) -> Result<Value, CommandError> {
+        let req: GetConfigRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        let active = self
+            .active_meters
+            .get(&req.meter_id)
+            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
+
+        Ok(serde_json::to_value(active.config).unwrap())
+    }
+
+    fn cmd_set_config(&mut self, payload: Value) -> Result<Value, CommandError> {
+        let req: SetConfigRequest = serde_json::from_value(payload)
+            .map_err(|e| CommandError::InvalidPayload(e.to_string()))?;
+
+        if self.continuous_reads.contains_key(&req.meter_id) {
+            return Err(CommandError::ExecutionFailed(
+                "set_config rejected while continuous read is active".to_string(),
+            ));
+        }
+
+        let active = self
+            .active_meters
+            .get_mut(&req.meter_id)
+            .ok_or_else(|| CommandError::ExecutionFailed("meter not found".to_string()))?;
+
+        active
+            .driver
+            .lock()
+            .unwrap()
+            .set_config(&req.config)
+            .map_err(|e| CommandError::ExecutionFailed(e.to_string()))?;
+
+        active.config = req.config;
+
+        self.event_bus().publish(ModuleEvent::ConfigChanged {
+            meter_id: req.meter_id.clone(),
+            config: req.config,
+        });
+
+        Ok(serde_json::to_value(req.config).unwrap())
+    }
 }
 
 impl Clone for ActiveMeter {
@@ -329,6 +436,8 @@ impl Clone for ActiveMeter {
         Self {
             instrument_id: self.instrument_id.clone(),
             instrument_model: self.instrument_model.clone(),
+            connected_at_utc: self.connected_at_utc,
+            config: self.config,
             driver: Arc::clone(&self.driver),
         }
     }
@@ -412,6 +521,22 @@ impl CalibrationModule for MeterModule {
                 name: "clear_history",
                 description: "Clear measurement history",
             },
+            ModuleCommandDef {
+                name: "list_active",
+                description: "List currently connected meters",
+            },
+            ModuleCommandDef {
+                name: "probe",
+                description: "Self-test instrument connectivity",
+            },
+            ModuleCommandDef {
+                name: "get_config",
+                description: "Get current meter configuration",
+            },
+            ModuleCommandDef {
+                name: "set_config",
+                description: "Set meter configuration",
+            },
         ]
     }
 
@@ -433,6 +558,10 @@ impl CalibrationModule for MeterModule {
             "export_json" => self.cmd_export_json(),
             "export_csv" => self.cmd_export_csv(),
             "clear_history" => self.cmd_clear_history(),
+            "list_active" => self.cmd_list_active(),
+            "probe" => self.cmd_probe(payload),
+            "get_config" => self.cmd_get_config(payload),
+            "set_config" => self.cmd_set_config(payload),
             _ => Err(CommandError::UnknownCommand(cmd.to_string())),
         }
     }

@@ -1,7 +1,8 @@
 //! hal-meters — Meter driver implementations.
 
+use chrono::Utc;
 use color_science::types::{Xyz, D65};
-use hal::meter::{MeasurementMode, Meter, MeterError};
+use hal::meter::{MeasurementMode, Meter, MeterConfig, MeterError, ProbeResult};
 use serde::{Deserialize, Serialize};
 
 /// Configuration for FakeMeter's output behavior.
@@ -33,6 +34,10 @@ pub enum FakeMeterConfig {
 pub struct FakeMeter {
     config: FakeMeterConfig,
     mode: MeasurementMode,
+    /// Operational averaging count (stored but ignored by read_xyz in Phase 1).
+    averaging_count: u32,
+    /// Operational integration time in ms (stored but ignored by read_xyz in Phase 1).
+    integration_time_ms: Option<u32>,
     sequence_index: usize,
     planckian_step_index: usize,
 }
@@ -54,6 +59,8 @@ impl FakeMeter {
         Ok(Self {
             config,
             mode: MeasurementMode::Emissive,
+            averaging_count: 1,
+            integration_time_ms: None,
             sequence_index: 0,
             planckian_step_index: 0,
         })
@@ -67,8 +74,12 @@ impl Default for FakeMeter {
 }
 
 impl Meter for FakeMeter {
-    fn probe(&mut self) -> Result<bool, MeterError> {
-        Ok(true)
+    fn probe(&mut self) -> Result<ProbeResult, MeterError> {
+        Ok(ProbeResult {
+            responsive: true,
+            firmware_version: Some("FakeMeter/1.0".to_string()),
+            last_communication_utc: Utc::now(),
+        })
     }
 
     fn read_xyz(&mut self) -> Result<Xyz, MeterError> {
@@ -119,6 +130,13 @@ impl Meter for FakeMeter {
 
     fn set_mode(&mut self, mode: MeasurementMode) -> Result<(), MeterError> {
         self.mode = mode;
+        Ok(())
+    }
+
+    fn set_config(&mut self, config: &MeterConfig) -> Result<(), MeterError> {
+        self.mode = config.mode;
+        self.averaging_count = config.averaging_count;
+        self.integration_time_ms = config.integration_time_ms;
         Ok(())
     }
 

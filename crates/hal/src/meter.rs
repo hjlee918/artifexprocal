@@ -1,5 +1,6 @@
 //! Meter trait — colorimeter and spectrophotometer abstraction.
 
+use chrono::{DateTime, Utc};
 use color_science::types::Xyz;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -90,8 +91,34 @@ mod tests {
     }
 }
 
+/// Result of a meter self-test probe.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeResult {
+    pub responsive: bool,
+    pub firmware_version: Option<String>,
+    pub last_communication_utc: DateTime<Utc>,
+}
+
+/// Operational configuration for a meter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MeterConfig {
+    pub mode: MeasurementMode,
+    pub averaging_count: u32,
+    pub integration_time_ms: Option<u32>,
+}
+
+impl Default for MeterConfig {
+    fn default() -> Self {
+        Self {
+            mode: MeasurementMode::Emissive,
+            averaging_count: 1,
+            integration_time_ms: None,
+        }
+    }
+}
+
 /// Measurement mode for meters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MeasurementMode {
     Emissive,
     Ambient,
@@ -104,7 +131,7 @@ pub enum MeasurementMode {
 /// A colorimeter or spectrophotometer.
 pub trait Meter: Send {
     /// Self-test: verify connectivity without taking a measurement.
-    fn probe(&mut self) -> Result<bool, MeterError>;
+    fn probe(&mut self) -> Result<ProbeResult, MeterError>;
 
     /// Take a single XYZ reading.
     fn read_xyz(&mut self) -> Result<Xyz, MeterError>;
@@ -113,6 +140,9 @@ pub trait Meter: Send {
     fn set_mode(&mut self, _mode: MeasurementMode) -> Result<(), MeterError> {
         Ok(())
     }
+
+    /// Apply operational configuration.
+    fn set_config(&mut self, config: &MeterConfig) -> Result<(), MeterError>;
 
     /// Disconnect from the instrument.
     fn disconnect(&mut self) -> Result<(), MeterError> {

@@ -1139,10 +1139,10 @@ interface ChromaticityDiagramProps {
 | `meter.read` | `ReadRequest` | `MeasurementResult` | Single spot read |
 | `meter.read_continuous` | `ReadContinuousRequest` | `{ status: "started" }` | Begin streaming reads |
 | `meter.stop_continuous` | `StopContinuousRequest` | `{ status: "stopped" }` | End streaming reads |
-| `meter.set_config` | `SetConfigRequest` | `MeterConfig` | Update meter settings |
+| `meter.list_active` | `{}` | `{ meters: Vec<ActiveMeterEntry> }` | List connected meters, ordered by `connected_at_utc` ascending |
+| `meter.probe` | `ProbeRequest` | `ProbeResult` | Self-test instrument; does NOT consume sequence values |
 | `meter.get_config` | `GetConfigRequest` | `MeterConfig` | Read meter settings |
-| `meter.probe` | `ProbeRequest` | `{ healthy: bool, message?: string }` | Self-test instrument |
-| `meter.list_active` | `{}` | `Vec<ActiveMeterInfo>` | List connected meters |
+| `meter.set_config` | `SetConfigRequest` | `MeterConfig` | Update meter settings; rejected during continuous read |
 | `meter.set_register` | `SetRegisterRequest` | `RegisterState` | Store current measurement into a register slot |
 | `meter.clear_register` | `ClearRegisterRequest` | `()` | Clear a register slot |
 | `meter.swap_registers` | `SwapRegistersRequest` | `()` | Swap two register slots |
@@ -1307,6 +1307,7 @@ A test in the `module-meter` crate generates a sample `Phase1MeasurementExport`,
 | `meter:health` | `MeterHealth` | Periodic health/status update |
 | `meter:error` | `{ meter_id: string, message: string }` | Instrument error |
 | `meter:register_changed` | `RegisterState` | A register slot was updated |
+| `meter:config_changed` | `{ meter_id: string, config: MeterConfig }` | Meter configuration was changed |
 | `meter:palette_imported` | `PaletteSummary` | A palette was successfully imported |
 | `meter:chromaticity_update` | `ChromaticityPoint` | New point for chromaticity diagram (throttled) |
 | `meter:tpg_patch_set` | `{ r: u8, g: u8, b: u8 }` | Confirmation that pattern generator patch was updated |

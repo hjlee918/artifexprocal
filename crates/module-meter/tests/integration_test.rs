@@ -1269,3 +1269,383 @@ async fn export_schema_patch_correlation_truth_table() {
         "case 6 (empty colorspace + null RGB + integer bitDepth) should be rejected"
     );
 }
+
+// ── list_active tests ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn list_active_empty() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let result = module
+        .handle_command("list_active", serde_json::json!({}))
+        .unwrap();
+    let meters = result["meters"].as_array().unwrap();
+    assert!(meters.is_empty(), "expected no active meters");
+}
+
+#[tokio::test]
+async fn list_active_one_connected() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    let result = module
+        .handle_command("list_active", serde_json::json!({}))
+        .unwrap();
+    let meters = result["meters"].as_array().unwrap();
+    assert_eq!(meters.len(), 1);
+
+    let entry = &meters[0];
+    assert_eq!(entry["meter_id"].as_str().unwrap(), meter_id);
+    assert_eq!(entry["instrument_model"].as_str().unwrap(), "FakeMeter");
+    assert_eq!(entry["instrument_serial"].as_str().unwrap(), "fake-meter-1");
+    assert!(
+        entry["connected_at_utc"].as_str().unwrap().contains("T"),
+        "connected_at_utc should be ISO 8601"
+    );
+    assert_eq!(entry["mode"].as_str().unwrap(), "Emissive");
+    assert_eq!(entry["is_continuous_active"].as_bool().unwrap(), false);
+}
+
+#[tokio::test]
+async fn list_active_continuous_flag() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    let result = module
+        .handle_command("list_active", serde_json::json!({}))
+        .unwrap();
+    let meters = result["meters"].as_array().unwrap();
+    assert_eq!(meters[0]["is_continuous_active"].as_bool().unwrap(), true);
+
+    module
+        .handle_command("stop_continuous", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    let result2 = module
+        .handle_command("list_active", serde_json::json!({}))
+        .unwrap();
+    let meters2 = result2["meters"].as_array().unwrap();
+    assert_eq!(meters2[0]["is_continuous_active"].as_bool().unwrap(), false);
+}
+
+// ── probe tests ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn probe_result_shape() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    let result = module
+        .handle_command("probe", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    assert_eq!(result["responsive"].as_bool().unwrap(), true);
+    assert_eq!(
+        result["firmware_version"].as_str().unwrap(),
+        "FakeMeter/1.0"
+    );
+    assert!(
+        result["last_communication_utc"].as_str().unwrap().contains("T"),
+        "last_communication_utc should be ISO 8601"
+    );
+}
+
+#[tokio::test]
+async fn probe_does_not_consume_sequence() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let xyz0 = color_science::types::Xyz { x: 1.0, y: 1.0, z: 1.0 };
+    let xyz1 = color_science::types::Xyz { x: 2.0, y: 2.0, z: 2.0 };
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "Sequence": {
+                        "values": [
+                            { "Ok": xyz0 },
+                            { "Ok": xyz1 }
+                        ],
+                        "loop_at_end": false
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    // Probe must NOT consume a sequence entry.
+    module
+        .handle_command("probe", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+
+    // First read MUST return xyz0 (index 0), not xyz1.
+    let read_result = module
+        .handle_command("read", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+    let measurement: color_science::measurement::MeasurementResult =
+        serde_json::from_value(read_result).unwrap();
+
+    assert!(
+        (measurement.xyz.x - xyz0.x).abs() < 1e-9,
+        "expected xyz0.x ({}), got {}",
+        xyz0.x,
+        measurement.xyz.x
+    );
+    assert!(
+        (measurement.xyz.y - xyz0.y).abs() < 1e-9,
+        "expected xyz0.y ({}), got {}",
+        xyz0.y,
+        measurement.xyz.y
+    );
+    assert!(
+        (measurement.xyz.z - xyz0.z).abs() < 1e-9,
+        "expected xyz0.z ({}), got {}",
+        xyz0.z,
+        measurement.xyz.z
+    );
+}
+
+#[tokio::test]
+async fn probe_allowed_during_continuous() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    module
+        .handle_command("probe", serde_json::json!({ "meter_id": meter_id }))
+        .expect("probe should succeed during continuous read");
+
+    module
+        .handle_command("stop_continuous", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+}
+
+// ── get_config / set_config tests ──────────────────────────────────
+
+#[tokio::test]
+async fn get_set_config_roundtrip() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    // Default config
+    let default = module
+        .handle_command("get_config", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+    assert_eq!(default["mode"].as_str().unwrap(), "Emissive");
+    assert_eq!(default["averaging_count"].as_u64().unwrap(), 1);
+    assert!(default["integration_time_ms"].is_null());
+
+    // Set new config
+    let new_config = serde_json::json!({
+        "meter_id": meter_id,
+        "config": {
+            "mode": "Ambient",
+            "averaging_count": 3,
+            "integration_time_ms": 250
+        }
+    });
+    let set = module
+        .handle_command("set_config", new_config)
+        .unwrap();
+    assert_eq!(set["mode"].as_str().unwrap(), "Ambient");
+    assert_eq!(set["averaging_count"].as_u64().unwrap(), 3);
+    assert_eq!(set["integration_time_ms"].as_u64().unwrap(), 250);
+
+    // Verify persisted
+    let retrieved = module
+        .handle_command("get_config", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+    assert_eq!(retrieved["mode"].as_str().unwrap(), "Ambient");
+    assert_eq!(retrieved["averaging_count"].as_u64().unwrap(), 3);
+    assert_eq!(retrieved["integration_time_ms"].as_u64().unwrap(), 250);
+}
+
+#[tokio::test]
+async fn set_config_rejected_during_continuous() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let connect = module
+        .handle_command(
+            "connect",
+            serde_json::json!({
+                "instrument_id": "fake-meter-1",
+                "fake_meter_config": {
+                    "PlanckianSweep": {
+                        "start_cct": 3000.0,
+                        "end_cct": 4000.0,
+                        "steps": 100,
+                        "target_luminance": 100.0,
+                        "loop_at_end": true
+                    }
+                }
+            }),
+        )
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "read_continuous",
+            serde_json::json!({ "meter_id": meter_id, "interval_ms": 10 }),
+        )
+        .unwrap();
+
+    let err = module
+        .handle_command(
+            "set_config",
+            serde_json::json!({
+                "meter_id": meter_id,
+                "config": {
+                    "mode": "Ambient",
+                    "averaging_count": 1,
+                    "integration_time_ms": null
+                }
+            }),
+        )
+        .expect_err("set_config should be rejected during continuous read");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("rejected") || msg.contains("continuous"),
+        "expected rejection message, got: {}",
+        msg
+    );
+
+    module
+        .handle_command("stop_continuous", serde_json::json!({ "meter_id": meter_id }))
+        .unwrap();
+}
+
+#[tokio::test]
+async fn config_changed_event_emitted() {
+    let event_bus = Arc::new(app_core::EventBus::new());
+    let ctx = app_core::ModuleContext::new(event_bus.clone());
+    let mut module = module_meter::MeterModule::new();
+    module.initialize(&ctx).unwrap();
+
+    let mut rx = event_bus.subscribe();
+
+    let connect = module
+        .handle_command("connect", serde_json::json!({ "instrument_id": "fake-meter-1" }))
+        .unwrap();
+    let meter_id = connect["meter_id"].as_str().unwrap();
+
+    module
+        .handle_command(
+            "set_config",
+            serde_json::json!({
+                "meter_id": meter_id,
+                "config": {
+                    "mode": "Ambient",
+                    "averaging_count": 3,
+                    "integration_time_ms": 250
+                }
+            }),
+        )
+        .unwrap();
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .expect("should receive event")
+        .expect("channel open");
+
+    assert!(
+        matches!(
+            event,
+            app_core::ModuleEvent::ConfigChanged {
+                meter_id: ref mid,
+                config,
+            } if mid == meter_id && config.mode == hal::meter::MeasurementMode::Ambient && config.averaging_count == 3
+        ),
+        "expected ConfigChanged with correct meter_id and config, got {:?}",
+        event
+    );
+}

@@ -133,6 +133,16 @@
 
 ---
 
+## 13. Sync Probe is a Phase 1 Simplification
+
+**What happened:** The `Meter` trait `probe()` method was kept synchronous in Phase 1 because `CalibrationModule::handle_command` is synchronous and no async driver adapters exist yet.
+
+**Impact:** Real drivers (ArgyllCMS PTY, native HID) will require async probe in Phase 2 when `driver_adapter.rs` wraps blocking I/O with `tokio::task::spawn_blocking`.
+
+**Rule for v2:** Revisit `probe` async signature when the first real driver adapter lands in Phase 2. Document the simplification now so the debt is visible, not invisible.
+
+---
+
 ## Summary: The New Rules
 
 | # | Rule |
