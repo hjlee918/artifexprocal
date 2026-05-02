@@ -225,7 +225,7 @@
 
 ## 22. Surface Scope Creep at Planning Time
 
-**What happened:** During the cct/duv milestone, the implementer proposed computing cct/duv at export time (deferring to Phase 2). The reviewer caught this as scope creep during the planning phase and directed computation to `MeasurementResult::from_xyz` construction time instead. During the export milestone, speculative `MeasurementResult` fields (Phase 2 colorspaces, density, photography modes) were similarly caught and deferred.
+**What happened:** During the cct/duv milestone, the implementer proposed computing cct/duv at export time (deferring to Phase 2). The reviewer caught this as scope creep during the planning phase and directed computation to `MeasurementResult::from_xyz` construction time instead. During the export milestone, speculative `MeasurementResult` fields planned for later phases were similarly caught and deferred.
 
 **Impact:** No speculative fields leaked into the Phase 1 measurement contract. The `MeasurementResult` struct contains only fields that are actually populated by Phase 1 code paths.
 
