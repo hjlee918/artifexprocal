@@ -1643,7 +1643,10 @@ async fn config_changed_event_emitted() {
             app_core::ModuleEvent::ConfigChanged {
                 meter_id: ref mid,
                 config,
-            } if mid == meter_id && config.mode == hal::meter::MeasurementMode::Ambient && config.averaging_count == 3
+            } if mid == meter_id
+                && config.mode == hal::meter::MeasurementMode::Ambient
+                && config.averaging_count == 3
+                && config.integration_time_ms == Some(250)
         ),
         "expected ConfigChanged with correct meter_id and config, got {:?}",
         event

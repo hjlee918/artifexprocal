@@ -44,10 +44,6 @@ struct ClearRegisterRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct ListActiveRequest {}
-
-#[derive(Debug, Deserialize)]
 struct ProbeRequest {
     meter_id: String,
 }
